@@ -2041,6 +2041,26 @@
             z-index: 9998;
             display: none;
         }
+        
+        /* ================= ADMIN NOTIFICATION ================= */
+        .admin-alert {
+            background: linear-gradient(90deg, #ff6b9d, #ff4757);
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: pulseWarning 2s infinite;
+        }
+        
+        .admin-alert.info {
+            background: linear-gradient(90deg, #a970ff, #7f3dff);
+        }
+        
+        .admin-alert.success {
+            background: linear-gradient(90deg, #1db954, #22e06d);
+        }
     </style>
 </head>
 <body>
@@ -3573,6 +3593,14 @@
                 </table>
             </div>
         </div>
+        
+        <div class="admin-alert info" style="margin-top: 30px;">
+            <i class="fas fa-info-circle"></i>
+            <div>
+                <strong>Centralized Data System</strong>
+                <p style="font-size: 12px; margin-top: 5px;">All user data is stored centrally. Every action from any device is visible here.</p>
+            </div>
+        </div>
     </div>
 
     <!-- All Users Page -->
@@ -3937,6 +3965,30 @@ Name: CapitalRise Trading</textarea>
                 </p>
             </div>
             
+            <!-- Data Management Section -->
+            <div class="form-group">
+                <label style="color:#a970ff; font-size:16px; margin-bottom:15px;">
+                    <i class="fas fa-database"></i> Data Management
+                </label>
+                <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
+                    <button class="btn" onclick="exportPlatformData()" style="flex:1; min-width:150px;">
+                        <i class="fas fa-download"></i> Export Data
+                    </button>
+                    <button class="btn" onclick="importPlatformData()" style="flex:1; min-width:150px;">
+                        <i class="fas fa-upload"></i> Import Data
+                    </button>
+                    <button class="btn" onclick="createDataBackup()" style="flex:1; min-width:150px;">
+                        <i class="fas fa-save"></i> Create Backup
+                    </button>
+                    <button class="btn" onclick="restoreFromBackup()" style="flex:1; min-width:150px;">
+                        <i class="fas fa-history"></i> Restore Backup
+                    </button>
+                </div>
+                <p style="font-size:12px; color:rgba(255,255,255,0.5); margin-top:10px;">
+                    <i class="fas fa-info-circle"></i> All data is stored centrally. Changes are visible across all devices.
+                </p>
+            </div>
+            
             <div style="margin-top:30px;">
                 <button class="btn" onclick="saveAdminSettings()">
                     <i class="fas fa-save"></i> Save Settings
@@ -4147,11 +4199,30 @@ Name: CapitalRise Trading</textarea>
 // ================= GLOBAL VARIABLES =================
 let currentUser = null;
 let currentAdmin = null;
-let userData = {};
 let selectedPaymentMethod = 'upi';
 let selectedPackageAmount = 0;
 let selectedPackageName = '';
-let adminData = {
+
+// Central storage key (Fixed for all devices)
+const CENTRAL_STORAGE_KEY = 'capitalrise_central_data_v3';
+const SESSION_KEY = 'capitalrise_session';
+
+// Default data structure - यह सभी डिवाइस में शेयर होगा
+let centralData = {
+    // Super admin credentials (only one admin)
+    superAdmin: {
+        id: 'admin',
+        name: 'Super Admin',
+        password: 'admin123',
+        email: 'admin@capitalrise.com',
+        lastLogin: new Date().toLocaleString(),
+        ipAddress: '192.168.1.1'
+    },
+    
+    // All user data - सभी यूजर का डेटा यहीं स्टोर होगा
+    users: {},
+    
+    // Admin settings
     settings: {
         minDeposit: 100,
         minWithdrawal: 200,
@@ -4163,133 +4234,407 @@ let adminData = {
         bankDetails: "State Bank of India\nAccount: 123456789012\nIFSC: SBIN0001234\nName: CapitalRise Trading",
         qrCode: null
     },
+    
+    // All requests - सभी रिक्वेस्ट्स यहीं स्टोर होंगी
     depositRequests: [],
     withdrawalRequests: [],
     packageRequests: [],
     kycRequests: [],
+    
+    // Platform stats
     platformBalance: 10000,
     transactions: [],
-    adminProfile: {
-        id: 'admin',
-        name: 'Super Admin',
-        password: 'admin123',
-        email: 'admin@capitalrise.com',
-        lastLogin: new Date().toLocaleString(),
-        ipAddress: '192.168.1.1'
-    }
+    
+    // System counters
+    userCounter: 1,
+    
+    // System logs
+    systemLogs: []
 };
 
-// Task Variables
+// Task variables
 let taskClickCount = 0;
 const taskTotalClicksNeeded = 15;
 let taskCompleted = false;
 
 // ================= INITIALIZATION =================
 document.addEventListener('DOMContentLoaded', function() {
-    initDemoData();
-    loadAdminData();
+    loadCentralData();
     checkSession();
     setupEventListeners();
     loadQRCode();
     
-    // Check if admin is logged in
-    if (localStorage.getItem('capitalriseAdmin') === 'loggedin') {
-        currentAdmin = adminData.adminProfile;
-        showAdminDashboard();
-    }
-    
-    // Demo credentials for testing
+    // Demo credentials
     document.getElementById('loginUserID').value = 'USER0001';
     document.getElementById('loginPassword').value = 'password123';
     document.getElementById('adminUsername').value = 'admin';
     document.getElementById('adminPassword').value = 'admin123';
     
-    // Initialize notification count
+    // Notification count initialize
     updateNotificationCount();
 });
 
-function initDemoData() {
-    const storedData = localStorage.getItem('capitalriseUsers');
-    if (storedData) {
-        userData = JSON.parse(storedData);
-    } else {
-        userData = {
-            'USER0001': {
-                name: "Demo User",
-                userId: "USER0001",
-                password: "password123",
-                joinDate: new Date().toLocaleDateString('en-US'),
-                balance: 0,
-                fund: 0,
-                email: "demo@example.com",
-                mobile: "+91 9876543210",
-                status: "Active",
-                package: "None",
-                kyc: "Pending",
-                totalIncome: 0,
-                todayIncome: 0,
-                referralIncome: 0,
-                totalTasks: 0,
-                referrals: 0,
-                rank: "Beginner",
-                activationHistory: [],
-                fundHistory: [],
-                levelIncome: [],
-                referralIncomeList: [],
-                rewardIncome: [],
-                taskIncome: [],
-                withdrawalHistory: [],
-                tasks: [],
-                kycSubmitted: false,
-                bankDetails: {
-                    accountNumber: "",
-                    ifscCode: "",
-                    bankName: ""
-                },
-                dailyTasks: {
-                    lastTaskDate: "",
-                    clicksCompleted: 0,
-                    todayIncome: 0
-                },
-                sponsorId: "CAPITAL01",
-                lastLogin: new Date().toLocaleString()
+function loadCentralData() {
+    try {
+        // First load from central storage
+        const storedData = localStorage.getItem(CENTRAL_STORAGE_KEY);
+        
+        if (storedData) {
+            const parsedData = JSON.parse(storedData);
+            
+            // Validate data structure
+            if (parsedData.users && parsedData.settings) {
+                centralData = parsedData;
+                
+                // Critical data check
+                if (!centralData.users['USER0001']) {
+                    createDefaultUser();
+                }
+                
+                console.log('Central data loaded successfully:', Object.keys(centralData.users).length, 'users');
+                logSystemActivity('System', 'Central data loaded');
+            } else {
+                console.log('Invalid data structure, creating default data');
+                createDefaultData();
             }
+        } else {
+            console.log('No existing data found, creating default data');
+            createDefaultData();
+        }
+        
+        // Save central data
+        saveCentralData();
+        
+    } catch (error) {
+        console.error('Error loading central data:', error);
+        createDefaultData();
+        saveCentralData();
+    }
+}
+
+function saveCentralData() {
+    try {
+        // Save in central storage
+        localStorage.setItem(CENTRAL_STORAGE_KEY, JSON.stringify(centralData));
+        
+        // Also save backup
+        localStorage.setItem(CENTRAL_STORAGE_KEY + '_backup_' + Date.now(), JSON.stringify(centralData));
+        
+        console.log('Central data saved successfully');
+        logSystemActivity('System', 'Central data saved');
+    } catch (error) {
+        console.error('Error saving central data:', error);
+        showToast('Error saving data. Please check storage space.', 'error');
+    }
+}
+
+function createDefaultData() {
+    centralData = {
+        superAdmin: {
+            id: 'admin',
+            name: 'Super Admin',
+            password: 'admin123',
+            email: 'admin@capitalrise.com',
+            lastLogin: new Date().toLocaleString(),
+            ipAddress: '192.168.1.1'
+        },
+        users: {},
+        settings: {
+            minDeposit: 100,
+            minWithdrawal: 200,
+            withdrawalFee: 5,
+            referralCommission: 10,
+            dailyTaskIncome: 5,
+            packageValidity: 30,
+            upiId: "capitalrise@ybl",
+            bankDetails: "State Bank of India\nAccount: 123456789012\nIFSC: SBIN0001234\nName: CapitalRise Trading",
+            qrCode: null
+        },
+        depositRequests: [],
+        withdrawalRequests: [],
+        packageRequests: [],
+        kycRequests: [],
+        platformBalance: 10000,
+        transactions: [],
+        userCounter: 1,
+        systemLogs: []
+    };
+    
+    createDefaultUser();
+    logSystemActivity('System', 'Default data created');
+}
+
+function createDefaultUser() {
+    // Create demo user
+    centralData.users['USER0001'] = {
+        name: "Demo User",
+        userId: "USER0001",
+        password: "password123",
+        joinDate: new Date().toLocaleDateString('en-US'),
+        balance: 1000,
+        fund: 5000,
+        email: "demo@example.com",
+        mobile: "+91 9876543210",
+        status: "Active",
+        package: "SILVER",
+        kyc: "Approved",
+        totalIncome: 1500,
+        todayIncome: 50,
+        referralIncome: 500,
+        totalTasks: 45,
+        referrals: 5,
+        rank: "Silver Trader",
+        activationHistory: [{
+            id: 'ACT001',
+            date: new Date().toLocaleString(),
+            package: "SILVER",
+            amount: 5000,
+            status: "Active",
+            validityTill: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US'),
+            dailyIncome: 250
+        }],
+        fundHistory: [{
+            date: new Date().toLocaleString(),
+            type: 'Registration Bonus',
+            amount: 50,
+            method: 'System',
+            status: 'Success',
+            balance: 50
+        }, {
+            date: new Date().toLocaleString(),
+            type: 'Deposit',
+            amount: 1000,
+            method: 'UPI',
+            status: 'Success',
+            balance: 1050
+        }, {
+            date: new Date().toLocaleString(),
+            type: 'Package Activation',
+            amount: 5000,
+            method: 'System',
+            status: 'Success',
+            balance: 1000
+        }],
+        levelIncome: [{
+            level: 1,
+            members: 3,
+            commission: "10%",
+            total: 300,
+            today: 10,
+            status: 'Active'
+        }],
+        referralIncomeList: [{
+            date: new Date().toLocaleString(),
+            referralId: "USER0002",
+            name: "John Referral",
+            package: "BRONZE",
+            commission: "10%",
+            amount: 100,
+            status: 'Paid'
+        }],
+        rewardIncome: [{
+            date: new Date().toLocaleString(),
+            type: "Daily Bonus",
+            description: "7 Days Streak Bonus",
+            amount: 100,
+            status: 'Paid',
+            action: 'Claimed'
+        }],
+        taskIncome: [],
+        withdrawalHistory: [{
+            date: new Date().toLocaleString(),
+            reqId: 'WDR001',
+            amount: 500,
+            method: 'UPI',
+            status: 'Approved',
+            processed: new Date().toLocaleString(),
+            transId: 'TXN123456',
+            fee: 25,
+            netAmount: 475
+        }],
+        tasks: [],
+        kycSubmitted: true,
+        bankDetails: {
+            accountNumber: "123456789012",
+            ifscCode: "SBIN0001234",
+            bankName: "State Bank of India"
+        },
+        dailyTasks: {
+            lastTaskDate: new Date().toLocaleDateString(),
+            clicksCompleted: 8,
+            todayIncome: 33.33
+        },
+        sponsorId: "CAPITAL01",
+        lastLogin: new Date().toLocaleString(),
+        createdBy: "System",
+        deviceInfo: "Default Device",
+        ipAddress: "192.168.1.1"
+    };
+    
+    // Create some more demo users
+    for (let i = 2; i <= 5; i++) {
+        const userId = 'USER' + String(i).padStart(4, '0');
+        centralData.users[userId] = {
+            name: "User " + i,
+            userId: userId,
+            password: "password123",
+            joinDate: new Date().toLocaleDateString('en-US'),
+            balance: Math.floor(Math.random() * 1000) + 100,
+            fund: Math.floor(Math.random() * 10000) + 1000,
+            email: "user" + i + "@example.com",
+            mobile: "+91 98765" + String(Math.floor(Math.random() * 100000)).padStart(5, '0'),
+            status: "Active",
+            package: ["BRONZE", "SILVER", "GOLDEN"][Math.floor(Math.random() * 3)],
+            kyc: Math.random() > 0.3 ? "Approved" : "Pending",
+            totalIncome: Math.floor(Math.random() * 5000) + 1000,
+            todayIncome: Math.floor(Math.random() * 100) + 10,
+            referralIncome: Math.floor(Math.random() * 500) + 50,
+            totalTasks: Math.floor(Math.random() * 100) + 10,
+            referrals: Math.floor(Math.random() * 10),
+            rank: ["Beginner", "Silver", "Gold"][Math.floor(Math.random() * 3)],
+            activationHistory: [],
+            fundHistory: [],
+            levelIncome: [],
+            referralIncomeList: [],
+            rewardIncome: [],
+            taskIncome: [],
+            withdrawalHistory: [],
+            tasks: [],
+            kycSubmitted: Math.random() > 0.5,
+            bankDetails: {
+                accountNumber: "",
+                ifscCode: "",
+                bankName: ""
+            },
+            dailyTasks: {
+                lastTaskDate: "",
+                clicksCompleted: 0,
+                todayIncome: 0
+            },
+            sponsorId: "USER0001",
+            lastLogin: new Date().toLocaleString(),
+            createdBy: "System",
+            deviceInfo: "Device " + i,
+            ipAddress: "192.168.1." + (i + 1)
         };
-        saveUserData();
-    }
-}
-
-function loadAdminData() {
-    const savedAdminData = localStorage.getItem('capitalriseAdminData');
-    if (savedAdminData) {
-        const parsedData = JSON.parse(savedAdminData);
-        adminData = { ...adminData, ...parsedData };
+        
+        centralData.users[userId].referrals = Math.floor(Math.random() * 5);
     }
     
-    const savedSettings = localStorage.getItem('capitalriseSettings');
-    if (savedSettings) {
-        adminData.settings = JSON.parse(savedSettings);
+    centralData.userCounter = 6;
+    
+    // Create demo transactions
+    for (let i = 0; i < 20; i++) {
+        const userIds = Object.keys(centralData.users);
+        const randomUser = userIds[Math.floor(Math.random() * userIds.length)];
+        const types = ['Deposit', 'Withdrawal', 'Task Income', 'Referral Commission', 'Package Activation'];
+        const statuses = ['Completed', 'Pending', 'Approved', 'Rejected'];
+        
+        centralData.transactions.push({
+            id: 'TRN' + String(1000000 + i),
+            userId: randomUser,
+            type: types[Math.floor(Math.random() * types.length)],
+            amount: Math.floor(Math.random() * 5000) + 100,
+            date: new Date(Date.now() - Math.floor(Math.random() * 7 * 24 * 60 * 60 * 1000)).toLocaleString(),
+            status: statuses[Math.floor(Math.random() * statuses.length)],
+            description: 'Demo transaction ' + (i + 1),
+            deviceInfo: 'Device ' + (Math.floor(Math.random() * 5) + 1)
+        });
     }
     
-    const savedAdminProfile = localStorage.getItem('capitalriseAdminProfile');
-    if (savedAdminProfile) {
-        adminData.adminProfile = JSON.parse(savedAdminProfile);
+    // Demo deposit requests
+    for (let i = 0; i < 5; i++) {
+        const userIds = Object.keys(centralData.users);
+        const randomUser = userIds[Math.floor(Math.random() * userIds.length)];
+        const user = centralData.users[randomUser];
+        
+        centralData.depositRequests.push({
+            requestId: 'DEP' + String(100000 + i),
+            userId: randomUser,
+            name: user.name,
+            amount: Math.floor(Math.random() * 5000) + 100,
+            method: 'UPI',
+            upiTransactionId: 'TXNU' + String(Math.floor(Math.random() * 1000000000)),
+            userUpiId: 'user' + Math.floor(Math.random() * 1000) + '@upi',
+            date: new Date(Date.now() - Math.floor(Math.random() * 3 * 24 * 60 * 60 * 1000)).toLocaleString(),
+            status: i < 2 ? "Pending" : "Approved",
+            notes: i < 2 ? "" : "Payment verified successfully",
+            deviceInfo: user.deviceInfo || 'Unknown'
+        });
     }
+    
+    // Demo withdrawal requests
+    for (let i = 0; i < 4; i++) {
+        const userIds = Object.keys(centralData.users);
+        const randomUser = userIds[Math.floor(Math.random() * userIds.length)];
+        const user = centralData.users[randomUser];
+        const methods = ['Bank', 'UPI', 'Paytm'];
+        
+        centralData.withdrawalRequests.push({
+            requestId: 'WDR' + String(100000 + i),
+            userId: randomUser,
+            name: user.name,
+            amount: Math.floor(Math.random() * 3000) + 200,
+            method: methods[Math.floor(Math.random() * methods.length)],
+            accountDetails: i === 0 ? "Bank: SBI, Account: XXXX1234, IFSC: SBIN0001234" : 
+                         i === 1 ? "UPI ID: user123@upi" : "Paytm: 9876543210",
+            date: new Date(Date.now() - Math.floor(Math.random() * 2 * 24 * 60 * 60 * 1000)).toLocaleString(),
+            status: i === 0 ? "Pending" : "Approved",
+            fee: 25,
+            netAmount: 475,
+            deviceInfo: user.deviceInfo || 'Unknown'
+        });
+    }
+    
+    // Demo KYC requests
+    for (let i = 0; i < 3; i++) {
+        const userIds = Object.keys(centralData.users).filter(id => centralData.users[id].kyc === "Pending");
+        if (userIds[i]) {
+            const user = centralData.users[userIds[i]];
+            
+            centralData.kycRequests.push({
+                userId: userIds[i],
+                name: user.name,
+                dob: "1990-01-0" + (i + 1),
+                aadharNumber: "1234" + String(5678 + i) + "9012",
+                panNumber: "ABCDE" + String(1234 + i) + "F",
+                bankAccount: "9876543210" + i,
+                ifscCode: "SBIN000123" + i,
+                submittedDate: new Date(Date.now() - Math.floor(Math.random() * 2 * 24 * 60 * 60 * 1000)).toLocaleString(),
+                status: "Pending",
+                deviceInfo: user.deviceInfo || 'Unknown'
+            });
+        }
+    }
+    
+    console.log('Default data created with', Object.keys(centralData.users).length, 'users');
+    logSystemActivity('System', 'Default users created: ' + Object.keys(centralData.users).length);
 }
 
-function saveAdminData() {
-    localStorage.setItem('capitalriseAdminData', JSON.stringify(adminData));
-    localStorage.setItem('capitalriseSettings', JSON.stringify(adminData.settings));
-    localStorage.setItem('capitalriseAdminProfile', JSON.stringify(adminData.adminProfile));
-}
-
-function saveUserData() {
-    localStorage.setItem('capitalriseUsers', JSON.stringify(userData));
+// ================= SYSTEM LOGGING =================
+function logSystemActivity(userId, action, details = '') {
+    const logEntry = {
+        timestamp: new Date().toLocaleString(),
+        userId: userId,
+        action: action,
+        details: details,
+        deviceInfo: navigator.userAgent,
+        ipAddress: 'Simulated IP'
+    };
+    
+    centralData.systemLogs.push(logEntry);
+    
+    // Limit system logs (max 1000 entries)
+    if (centralData.systemLogs.length > 1000) {
+        centralData.systemLogs = centralData.systemLogs.slice(-500);
+    }
+    
+    saveCentralData();
 }
 
 // ================= QR CODE FUNCTIONS =================
 function loadQRCode() {
-    const qrCode = adminData.settings.qrCode;
+    const qrCode = centralData.settings.qrCode;
     const qrImage = document.getElementById('qrCodeImage');
     const currentQrImage = document.getElementById('currentQrImage');
     const noQrMessage = document.getElementById('noQrMessage');
@@ -4333,23 +4678,25 @@ function handleQRCodeUpload(input) {
     
     const reader = new FileReader();
     reader.onload = function(e) {
-        adminData.settings.qrCode = e.target.result;
-        saveAdminData();
+        centralData.settings.qrCode = e.target.result;
+        saveCentralData();
         loadQRCode();
         showToast('QR code uploaded successfully!', 'success');
         document.getElementById('qrCodeFileName').innerHTML = `<i class="fas fa-check-circle" style="color:#1db954"></i> ${file.name}`;
+        logSystemActivity(currentAdmin ? currentAdmin.id : 'System', 'QR Code Updated', file.name);
     };
     reader.readAsDataURL(file);
 }
 
 function removeQRCode() {
     if (confirm('Are you sure you want to remove the QR code?')) {
-        adminData.settings.qrCode = null;
-        saveAdminData();
+        centralData.settings.qrCode = null;
+        saveCentralData();
         loadQRCode();
         showToast('QR code removed successfully!', 'success');
         document.getElementById('qrCodeFileName').innerText = 'Click to upload QR Code Image';
         document.getElementById('qrCodeUpload').value = '';
+        logSystemActivity(currentAdmin ? currentAdmin.id : 'System', 'QR Code Removed');
     }
 }
 
@@ -4408,10 +4755,18 @@ function showAdminLogin() {
 }
 
 function checkSession() {
-    const loggedInUser = localStorage.getItem('capitalriseCurrentUser');
-    if (loggedInUser && userData[loggedInUser]) {
-        currentUser = userData[loggedInUser];
-        showDashboard();
+    const sessionData = localStorage.getItem(SESSION_KEY);
+    if (sessionData) {
+        const session = JSON.parse(sessionData);
+        
+        if (session.type === 'user' && centralData.users[session.userId]) {
+            currentUser = centralData.users[session.userId];
+            showDashboard();
+            logSystemActivity(session.userId, 'Session resumed from device');
+        } else if (session.type === 'admin' && session.userId === centralData.superAdmin.id) {
+            currentAdmin = centralData.superAdmin;
+            showAdminDashboard();
+        }
     }
 }
 
@@ -4427,7 +4782,7 @@ function login() {
     showLoading();
     
     setTimeout(() => {
-        const user = userData[userId];
+        const user = centralData.users[userId];
         
         if (!user) {
             hideLoading();
@@ -4448,33 +4803,43 @@ function login() {
         }
         
         currentUser = user;
-        localStorage.setItem('capitalriseCurrentUser', userId);
+        
+        // Save session
+        localStorage.setItem(SESSION_KEY, JSON.stringify({
+            type: 'user',
+            userId: userId,
+            timestamp: Date.now()
+        }));
         
         // Update last login
         user.lastLogin = new Date().toLocaleString();
-        saveUserData();
+        user.deviceInfo = navigator.userAgent.substring(0, 100);
+        saveCentralData();
         
         hideLoading();
         showDashboard();
         showToast(`Welcome back, ${user.name}!`, 'success');
         
-        // Reset daily tasks if new day
+        // Reset daily tasks if needed
         resetDailyTasksIfNeeded();
         
-        // Record login activity
-        adminData.transactions.push({
+        // Log activity
+        centralData.transactions.push({
             id: 'ACT' + Math.floor(Math.random() * 1000000),
             userId: userId,
             type: 'Login',
             amount: 0,
             date: new Date().toLocaleString(),
             status: 'Success',
-            description: 'User logged in'
+            description: 'User logged in from ' + navigator.userAgent.substring(0, 50),
+            deviceInfo: navigator.userAgent
         });
-        saveAdminData();
         
-        // Show registration popup for new users
-        if (user.balance === 0) {
+        logSystemActivity(userId, 'User Login', 'Device: ' + navigator.userAgent);
+        saveCentralData();
+        
+        // Registration popup for new users
+        if (user.balance < 50 && !user.activationHistory.length) {
             setTimeout(() => {
                 showRegistrationPopup(user);
             }, 1000);
@@ -4486,16 +4851,38 @@ function adminLogin() {
     const adminId = document.getElementById('adminUsername').value.trim();
     const password = document.getElementById('adminPassword').value;
     
-    if (adminId === 'admin' && password === 'admin123') {
-        currentAdmin = adminData.adminProfile;
-        localStorage.setItem('capitalriseAdmin', 'loggedin');
+    if (adminId === centralData.superAdmin.id && password === centralData.superAdmin.password) {
+        currentAdmin = centralData.superAdmin;
+        
+        // Save admin session
+        localStorage.setItem(SESSION_KEY, JSON.stringify({
+            type: 'admin',
+            userId: adminId,
+            timestamp: Date.now()
+        }));
         
         // Update admin last login
-        adminData.adminProfile.lastLogin = new Date().toLocaleString();
-        saveAdminData();
+        centralData.superAdmin.lastLogin = new Date().toLocaleString();
+        centralData.superAdmin.ipAddress = '192.168.1.1';
+        saveCentralData();
         
         showAdminDashboard();
         showToast('Admin login successful!', 'success');
+        
+        // Log admin login
+        centralData.transactions.push({
+            id: 'ADM' + Math.floor(Math.random() * 1000000),
+            userId: 'ADMIN',
+            type: 'Admin Login',
+            amount: 0,
+            date: new Date().toLocaleString(),
+            status: 'Success',
+            description: 'Admin logged in',
+            deviceInfo: navigator.userAgent
+        });
+        
+        logSystemActivity('ADMIN', 'Admin Login', 'Device: ' + navigator.userAgent);
+        saveCentralData();
     } else {
         showToast('Invalid admin credentials', 'error');
     }
@@ -4524,15 +4911,19 @@ function register() {
         return;
     }
     
-    let userId;
-    do {
-        userId = 'USER' + Math.floor(1000 + Math.random() * 9000);
-    } while (userData[userId]);
+    // Check sponsor
+    if (sponsorId && !centralData.users[sponsorId]) {
+        showToast('Sponsor ID not found', 'error');
+        return;
+    }
+    
+    // Generate unique user ID
+    const userId = 'USER' + String(centralData.userCounter++).padStart(4, '0');
     
     showLoading();
     
     setTimeout(() => {
-        userData[userId] = {
+        centralData.users[userId] = {
             name: name,
             userId: userId,
             password: password,
@@ -4551,7 +4942,14 @@ function register() {
             referrals: 0,
             rank: "Beginner",
             activationHistory: [],
-            fundHistory: [],
+            fundHistory: [{
+                date: new Date().toLocaleString(),
+                type: 'Registration Bonus',
+                amount: 50,
+                method: 'System',
+                status: 'Success',
+                balance: 50
+            }],
             levelIncome: [],
             referralIncomeList: [],
             rewardIncome: [],
@@ -4570,37 +4968,63 @@ function register() {
                 todayIncome: 0
             },
             sponsorId: sponsorId || "CAPITAL01",
-            lastLogin: new Date().toLocaleString()
+            lastLogin: new Date().toLocaleString(),
+            createdBy: "Self Registration",
+            deviceInfo: navigator.userAgent,
+            ipAddress: "User Device IP"
         };
         
-        // Add registration bonus transaction
-        userData[userId].fundHistory.push({
-            date: new Date().toLocaleString(),
-            type: 'Registration Bonus',
-            amount: 50,
-            method: 'System',
-            status: 'Success',
-            balance: 50
-        });
+        // If sponsor exists, give referral commission
+        if (sponsorId && centralData.users[sponsorId]) {
+            const sponsor = centralData.users[sponsorId];
+            sponsor.referrals = (sponsor.referrals || 0) + 1;
+            
+            const commission = 10; // ₹10 referral bonus
+            sponsor.balance += commission;
+            sponsor.referralIncome += commission;
+            sponsor.totalIncome += commission;
+            
+            sponsor.referralIncomeList.push({
+                date: new Date().toLocaleString(),
+                referralId: userId,
+                name: name,
+                package: "None",
+                commission: "10%",
+                amount: commission,
+                status: 'Paid'
+            });
+            
+            centralData.transactions.push({
+                id: 'REF' + Math.floor(Math.random() * 1000000),
+                userId: sponsorId,
+                type: 'Referral Commission',
+                amount: commission,
+                date: new Date().toLocaleString(),
+                status: 'Completed',
+                description: `Referral bonus for ${userId} registration`
+            });
+        }
         
-        saveUserData();
+        saveCentralData();
         
         hideLoading();
         
         // Show registration popup
-        showRegistrationPopup(userData[userId]);
+        showRegistrationPopup(centralData.users[userId]);
         
-        // Record registration
-        adminData.transactions.push({
+        // Log registration
+        centralData.transactions.push({
             id: 'REG' + Math.floor(Math.random() * 1000000),
             userId: userId,
             type: 'Registration',
             amount: 50,
             date: new Date().toLocaleString(),
             status: 'Success',
-            description: 'New user registration with ₹50 bonus'
+            description: 'New user registration with ₹50 bonus from device: ' + navigator.userAgent.substring(0, 50)
         });
-        saveAdminData();
+        
+        logSystemActivity(userId, 'New Registration', 'Sponsor: ' + (sponsorId || 'None'));
+        saveCentralData();
         
         // Clear form
         document.getElementById('regFullName').value = '';
@@ -4633,16 +5057,18 @@ function closeRegistrationPopup() {
 
 function logout() {
     if (confirm('Are you sure you want to logout?')) {
+        logSystemActivity(currentUser.userId, 'User Logout');
         currentUser = null;
-        localStorage.removeItem('capitalriseCurrentUser');
+        localStorage.removeItem(SESSION_KEY);
         location.reload();
     }
 }
 
 function adminLogout() {
     if (confirm('Are you sure you want to logout?')) {
+        logSystemActivity('ADMIN', 'Admin Logout');
         currentAdmin = null;
-        localStorage.removeItem('capitalriseAdmin');
+        localStorage.removeItem(SESSION_KEY);
         location.reload();
     }
 }
@@ -4666,7 +5092,6 @@ function showAdminDashboard() {
     document.getElementById('adminDashboard').style.display = 'block';
     
     updateAdminDashboard();
-    loadAdminData();
     loadQRCode();
     closeSidebar();
 }
@@ -4797,7 +5222,7 @@ function updateDashboard() {
     
     // Update user status badge
     const statusBadge = document.getElementById('userStatusBadge');
-    if (currentUser.package === "None") {
+    if (currentUser.package === "None" || currentUser.package === "Pending") {
         statusBadge.innerText = "Inactive";
         statusBadge.style.background = "linear-gradient(90deg, #ff6b6b, #ff4757)";
     } else {
@@ -4826,7 +5251,7 @@ function updateDashboard() {
     document.getElementById('kycStatusText').style.color = currentUser.kyc === "Approved" ? "#1db954" : 
                                                          currentUser.kyc === "Pending" ? "#ffc107" : "#ff4757";
     
-    // Update Add Fund page balance
+    // Update add fund page balances
     document.getElementById('walletBalance').innerText = `₹${currentUser.balance}`;
     document.getElementById('withdrawBalance').innerText = `₹${currentUser.balance}`;
     
@@ -4842,17 +5267,17 @@ function loadTaskPage() {
     
     resetDailyTasksIfNeeded();
     
-    // Load task progress from user data
+    // Load task progress
     taskClickCount = currentUser.dailyTasks.clicksCompleted || 0;
     taskCompleted = taskClickCount >= taskTotalClicksNeeded;
     
     // Update UI
     updateTaskUI();
     
-    // Calculate and display rewards
+    // Calculate rewards
     updateTaskRewards();
     
-    // Add event listener for click button
+    // Event listener for click button
     const clickButton = document.getElementById('task-click-button');
     if (clickButton) {
         clickButton.onclick = handleTaskClick;
@@ -4879,14 +5304,14 @@ function updateTaskUI() {
         pendingCount.innerText = "15";
     }
     
-    // Update progress text
+    // Progress text
     progressText.textContent = `Progress: ${taskClickCount}/${taskTotalClicksNeeded} clicks`;
     
-    // Update progress bar
+    // Progress bar
     const progressPercentage = (taskClickCount / taskTotalClicksNeeded) * 100;
     progressFill.style.width = `${progressPercentage}%`;
     
-    // Update task completion status
+    // Task completion status
     if (taskCompleted) {
         taskCheckbox.classList.add('completed');
         taskCard.classList.add('completed');
@@ -4910,18 +5335,18 @@ function updateTaskUI() {
 function updateTaskRewards() {
     if (!currentUser) return;
     
-    // Calculate reward (5% of fund divided by 15 clicks)
+    // Calculate rewards (5% of fund divided by 15 clicks)
     let perClickReward = 0;
     let dailyReward = 0;
     
     if (currentUser.package !== "None" && currentUser.fund > 0) {
-        dailyReward = currentUser.fund * (adminData.settings.dailyTaskIncome / 100);
+        dailyReward = currentUser.fund * (centralData.settings.dailyTaskIncome / 100);
         perClickReward = dailyReward / taskTotalClicksNeeded;
     }
     
     const earnedToday = currentUser.dailyTasks.todayIncome || 0;
     
-    // Update reward displays
+    // Update reward display
     document.getElementById('per-click-reward').innerText = `₹${perClickReward.toFixed(2)}`;
     document.getElementById('daily-reward').innerText = `₹${dailyReward.toFixed(2)}`;
     document.getElementById('today-earned').innerText = `₹${earnedToday.toFixed(2)}`;
@@ -4951,7 +5376,7 @@ function handleTaskClick() {
         return;
     }
     
-    // Check if package is expired
+    // Check if package expired
     const activePackage = currentUser.activationHistory.find(pkg => 
         pkg.status === "Active" && new Date(pkg.validityTill) > new Date()
     );
@@ -4973,17 +5398,17 @@ function handleTaskClick() {
     clickButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
     
     setTimeout(() => {
-        // Increment click count
+        // Increase click count
         taskClickCount++;
         currentUser.dailyTasks.clicksCompleted = taskClickCount;
         
-        // Check if task is completed
+        // Check if task completed
         if (taskClickCount >= taskTotalClicksNeeded) {
             taskCompleted = true;
         }
         
         // Calculate reward
-        const dailyReward = currentUser.fund * (adminData.settings.dailyTaskIncome / 100);
+        const dailyReward = currentUser.fund * (centralData.settings.dailyTaskIncome / 100);
         const perClickReward = dailyReward / taskTotalClicksNeeded;
         
         // Update user data
@@ -5004,11 +5429,11 @@ function handleTaskClick() {
         });
         
         // Save data
-        userData[currentUser.userId] = currentUser;
-        saveUserData();
+        centralData.users[currentUser.userId] = currentUser;
+        saveCentralData();
         
         // Record transaction
-        adminData.transactions.push({
+        centralData.transactions.push({
             id: 'TASK' + Math.floor(Math.random() * 1000000),
             userId: currentUser.userId,
             type: 'Task Income',
@@ -5017,7 +5442,9 @@ function handleTaskClick() {
             status: 'Completed',
             description: `Daily click task #${taskClickCount} from ${currentUser.package} package`
         });
-        saveAdminData();
+        
+        logSystemActivity(currentUser.userId, 'Task Click', `Click ${taskClickCount}/${taskTotalClicksNeeded}`);
+        saveCentralData();
         
         // Update UI
         updateTaskUI();
@@ -5081,7 +5508,7 @@ function resetDailyTasksIfNeeded() {
             clicksCompleted: 0,
             todayIncome: 0
         };
-        saveUserData();
+        saveCentralData();
         
         // Reset task variables
         taskClickCount = 0;
@@ -5124,13 +5551,13 @@ function activatePackageRequest(amount, packageName) {
     }
     
     // Ask for confirmation
-    if (confirm(`Are you sure you want to activate ${packageName} package for ₹${amount}?\nThis package will be active for ${adminData.settings.packageValidity} days.`)) {
+    if (confirm(`Are you sure you want to activate ${packageName} package for ₹${amount}?\nThis package will be active for ${centralData.settings.packageValidity} days.`)) {
         showLoading();
         
         setTimeout(() => {
             // Calculate validity date
             const validityDate = new Date();
-            validityDate.setDate(validityDate.getDate() + adminData.settings.packageValidity);
+            validityDate.setDate(validityDate.getDate() + centralData.settings.packageValidity);
             
             // Create activation record
             const activationId = 'ACT' + Math.floor(Math.random() * 1000000);
@@ -5141,7 +5568,7 @@ function activatePackageRequest(amount, packageName) {
                 amount: amount,
                 status: "Active",
                 validityTill: validityDate.toLocaleDateString('en-US'),
-                dailyIncome: (amount * adminData.settings.dailyTaskIncome / 100)
+                dailyIncome: (amount * centralData.settings.dailyTaskIncome / 100)
             };
             
             // Update user data
@@ -5151,21 +5578,22 @@ function activatePackageRequest(amount, packageName) {
             currentUser.activationHistory.push(activationRecord);
             
             // Save data
-            userData[currentUser.userId] = currentUser;
-            saveUserData();
+            centralData.users[currentUser.userId] = currentUser;
+            saveCentralData();
             
             // Record transaction
-            adminData.transactions.push({
+            centralData.transactions.push({
                 id: activationId,
                 userId: currentUser.userId,
                 type: 'Package Activation',
                 amount: amount,
                 date: new Date().toLocaleString(),
                 status: 'Completed',
-                description: `${packageName} package activated for ${adminData.settings.packageValidity} days`
+                description: `${packageName} package activated for ${centralData.settings.packageValidity} days from device`
             });
             
-            saveAdminData();
+            logSystemActivity(currentUser.userId, 'Package Activated', `${packageName} - ₹${amount}`);
+            saveCentralData();
             
             hideLoading();
             showToast(`${packageName} package activated successfully! You can now start daily tasks.`, 'success');
@@ -5218,11 +5646,11 @@ function updateActivationDetails() {
     detailsDiv.innerHTML = `
         <h4 style="color:#a970ff; margin-bottom:15px;">${pkg.name} Package Benefits:</h4>
         <div class="pkg-features">
-            <li><i class="fas fa-check-circle"></i> Daily Task Income: ${adminData.settings.dailyTaskIncome}%</li>
-            <li><i class="fas fa-check-circle"></i> Referral Commission: ${adminData.settings.referralCommission}%</li>
+            <li><i class="fas fa-check-circle"></i> Daily Task Income: ${centralData.settings.dailyTaskIncome}%</li>
+            <li><i class="fas fa-check-circle"></i> Referral Commission: ${centralData.settings.referralCommission}%</li>
             <li><i class="fas fa-check-circle"></i> Daily 15 Clicks Task</li>
             <li><i class="fas fa-check-circle"></i> Withdrawal in 24-48 hours</li>
-            <li><i class="fas fa-check-circle"></i> Validity: ${adminData.settings.packageValidity} Days</li>
+            <li><i class="fas fa-check-circle"></i> Validity: ${centralData.settings.packageValidity} Days</li>
         </div>
     `;
     
@@ -5260,10 +5688,10 @@ function selectPaymentMethod(method) {
     if (method === 'upi') {
         const qrDisplay = document.getElementById('qrCodeDisplay');
         const qrImage = document.getElementById('qrCodeImage');
-        if (adminData.settings.qrCode) {
-            qrImage.src = adminData.settings.qrCode;
+        if (centralData.settings.qrCode) {
+            qrImage.src = centralData.settings.qrCode;
             qrDisplay.style.display = 'block';
-            document.getElementById('qrUpiId').innerText = adminData.settings.upiId;
+            document.getElementById('qrUpiId').innerText = centralData.settings.upiId;
         } else {
             qrDisplay.style.display = 'none';
         }
@@ -5275,8 +5703,8 @@ function processPayment() {
     const upiTransactionId = document.getElementById('userUpiTransactionId').value.trim();
     const userUpiId = document.getElementById('userUpiId')?.value.trim() || '';
     
-    if (!amount || amount < adminData.settings.minDeposit) {
-        showToast(`Minimum deposit is ₹${adminData.settings.minDeposit}`, 'error');
+    if (!amount || amount < centralData.settings.minDeposit) {
+        showToast(`Minimum deposit is ₹${centralData.settings.minDeposit}`, 'error');
         return;
     }
     
@@ -5287,7 +5715,7 @@ function processPayment() {
     
     const requestId = 'DEP' + Math.floor(Math.random() * 1000000);
     
-    adminData.depositRequests.push({
+    centralData.depositRequests.push({
         requestId: requestId,
         userId: currentUser.userId,
         name: currentUser.name,
@@ -5297,10 +5725,11 @@ function processPayment() {
         userUpiId: userUpiId,
         date: new Date().toLocaleString(),
         status: "Pending",
-        notes: ""
+        notes: "",
+        deviceInfo: navigator.userAgent
     });
     
-    saveAdminData();
+    saveCentralData();
     
     // Clear form
     document.getElementById('fundAmount').value = '';
@@ -5308,6 +5737,7 @@ function processPayment() {
     document.getElementById('userUpiId').value = '';
     
     showToast(`Deposit request submitted! Request ID: ${requestId}. Amount will be added after admin approval.`, 'success');
+    logSystemActivity(currentUser.userId, 'Deposit Request', `₹${amount} - Pending`);
     updateNotificationCount();
 }
 
@@ -5323,8 +5753,8 @@ function processWithdrawal() {
     const amount = parseInt(document.getElementById('withdrawAmount').value);
     const method = document.getElementById('withdrawMethod').value;
     
-    if (!amount || amount < adminData.settings.minWithdrawal) {
-        showToast(`Minimum withdrawal is ₹${adminData.settings.minWithdrawal}`, 'error');
+    if (!amount || amount < centralData.settings.minWithdrawal) {
+        showToast(`Minimum withdrawal is ₹${centralData.settings.minWithdrawal}`, 'error');
         return;
     }
     
@@ -5339,7 +5769,7 @@ function processWithdrawal() {
         return;
     }
     
-    const fee = (amount * adminData.settings.withdrawalFee) / 100;
+    const fee = (amount * centralData.settings.withdrawalFee) / 100;
     const netAmount = amount - fee;
     
     const requestId = 'WDR' + Math.floor(Math.random() * 1000000);
@@ -5390,7 +5820,7 @@ function processWithdrawal() {
         netAmount: netAmount
     });
     
-    adminData.withdrawalRequests.push({
+    centralData.withdrawalRequests.push({
         requestId: requestId,
         userId: currentUser.userId,
         name: currentUser.name,
@@ -5400,10 +5830,11 @@ function processWithdrawal() {
         date: new Date().toLocaleString(),
         status: "Pending",
         fee: fee,
-        netAmount: netAmount
+        netAmount: netAmount,
+        deviceInfo: navigator.userAgent
     });
     
-    adminData.transactions.push({
+    centralData.transactions.push({
         id: requestId,
         userId: currentUser.userId,
         type: 'Withdrawal',
@@ -5413,8 +5844,7 @@ function processWithdrawal() {
         description: `Withdrawal request, Fee: ₹${fee}`
     });
     
-    saveUserData();
-    saveAdminData();
+    saveCentralData();
     
     // Clear form
     document.getElementById('withdrawAmount').value = '';
@@ -5430,6 +5860,7 @@ function processWithdrawal() {
     }
     
     showToast(`Withdrawal request submitted. ₹${amount} will be processed within 24-48 hours. Fee: ₹${fee}`, 'success');
+    logSystemActivity(currentUser.userId, 'Withdrawal Request', `₹${amount} - Pending`);
     showPage('dashboardPage');
     updateDashboard();
     updateNotificationCount();
@@ -5472,7 +5903,7 @@ function submitKYC() {
         return;
     }
     
-    adminData.kycRequests.push({
+    centralData.kycRequests.push({
         userId: currentUser.userId,
         name: name,
         dob: dob,
@@ -5481,7 +5912,8 @@ function submitKYC() {
         bankAccount: bankAccount,
         ifscCode: ifscCode,
         submittedDate: new Date().toLocaleString(),
-        status: "Pending"
+        status: "Pending",
+        deviceInfo: navigator.userAgent
     });
     
     currentUser.kyc = "Under Review";
@@ -5489,10 +5921,10 @@ function submitKYC() {
     currentUser.bankDetails.accountNumber = bankAccount;
     currentUser.bankDetails.ifscCode = ifscCode;
     
-    saveUserData();
-    saveAdminData();
+    saveCentralData();
     
     showToast("KYC submitted successfully! It will be reviewed within 24-48 hours.", 'success');
+    logSystemActivity(currentUser.userId, 'KYC Submitted');
     showPage('profilePage');
     updateDashboard();
     updateNotificationCount();
@@ -5529,8 +5961,8 @@ function changePassword() {
     setTimeout(() => {
         currentUser.password = newPass;
         
-        userData[currentUser.userId] = currentUser;
-        saveUserData();
+        centralData.users[currentUser.userId] = currentUser;
+        saveCentralData();
         
         document.getElementById('currentPassword').value = '';
         document.getElementById('newPassword').value = '';
@@ -5538,6 +5970,7 @@ function changePassword() {
         
         hideLoading();
         showToast('Password changed successfully!', 'success');
+        logSystemActivity(currentUser.userId, 'Password Changed');
         showPage('profilePage');
     }, 1000);
 }
@@ -5634,9 +6067,9 @@ function updateFundReportTable() {
 }
 
 function updateIncomeTables() {
-    // Level Income Table
+    // Level income table
     const levels = [
-        {level: 1, members: currentUser.referrals || 0, commission: `${adminData.settings.referralCommission}%`, total: currentUser.referralIncome || 0, today: 0, status: 'Active'}
+        {level: 1, members: currentUser.referrals || 0, commission: `${centralData.settings.referralCommission}%`, total: currentUser.referralIncome || 0, today: 0, status: 'Active'}
     ];
     
     let levelHtml = '';
@@ -5666,7 +6099,7 @@ function updateIncomeTables() {
     document.getElementById('todayLevelIncome').innerText = `₹${todayLevelIncome.toLocaleString()}`;
     document.getElementById('activeLevels').innerText = activeLevels;
     
-    // ROI Income Table (Task Income)
+    // ROI income table (task income)
     let taskHtml = '';
     let totalTaskIncome = 0;
     let todayTaskIncome = 0;
@@ -5682,8 +6115,8 @@ function updateIncomeTables() {
                     <td>${task.date}</td>
                     <td>${task.package}</td>
                     <td>₹${task.fund.toLocaleString()}</td>
-                    <td>${adminData.settings.dailyTaskIncome}%</td>
-                    <td>₹${(task.fund * adminData.settings.dailyTaskIncome / 100 / 15).toFixed(2)}</td>
+                    <td>${centralData.settings.dailyTaskIncome}%</td>
+                    <td>₹${(task.fund * centralData.settings.dailyTaskIncome / 100 / 15).toFixed(2)}</td>
                     <td>₹${task.amount.toFixed(2)}</td>
                     <td><span style="color:#1db954">Completed</span></td>
                 </tr>
@@ -5760,10 +6193,10 @@ function updateNotificationCount() {
     let count = 0;
     
     if (currentAdmin) {
-        count += adminData.depositRequests.filter(req => req.status === "Pending").length;
-        count += adminData.withdrawalRequests.filter(req => req.status === "Pending").length;
-        count += adminData.packageRequests.filter(req => req.status === "Pending").length;
-        count += adminData.kycRequests.filter(req => req.status === "Pending").length;
+        count += centralData.depositRequests.filter(req => req.status === "Pending").length;
+        count += centralData.withdrawalRequests.filter(req => req.status === "Pending").length;
+        count += centralData.packageRequests.filter(req => req.status === "Pending").length;
+        count += centralData.kycRequests.filter(req => req.status === "Pending").length;
     } else if (currentUser) {
         count += currentUser.withdrawalHistory.filter(w => w.status === "Pending").length;
     }
@@ -5815,6 +6248,7 @@ function setupEventListeners() {
 
 // ================= ADMIN FUNCTIONS =================
 function updateAdminDashboard() {
+    const users = centralData.users;
     let totalUsers = 0;
     let activeUsers = 0;
     let totalDeposits = 0;
@@ -5830,33 +6264,33 @@ function updateAdminDashboard() {
     
     const today = new Date().toLocaleDateString();
     
-    for (const userId in userData) {
+    for (const userId in users) {
         totalUsers++;
-        if (userData[userId].status === "Active") activeUsers++;
-        if (userData[userId].joinDate === today) todayUsers++;
-        totalInvestments += userData[userId].fund || 0;
-        totalCommission += userData[userId].referralIncome || 0;
+        if (users[userId].status === "Active") activeUsers++;
+        if (users[userId].joinDate === today) todayUsers++;
+        totalInvestments += users[userId].fund || 0;
+        totalCommission += users[userId].referralIncome || 0;
         
         // Check if user was active today
-        if (userData[userId].lastLogin && userData[userId].lastLogin.includes(today)) {
+        if (users[userId].lastLogin && users[userId].lastLogin.includes(today)) {
             activeToday++;
         }
     }
     
-    adminData.depositRequests.forEach(req => {
+    centralData.depositRequests.forEach(req => {
         if (req.status === "Approved") totalDeposits += req.amount;
         if (req.date.includes(today) && req.status === "Approved") todayDeposits += req.amount;
     });
     
-    adminData.withdrawalRequests.forEach(req => {
+    centralData.withdrawalRequests.forEach(req => {
         if (req.status === "Approved") totalWithdrawals += req.amount;
         if (req.status === "Pending") pendingWithdrawals += req.amount;
         if (req.date.includes(today) && req.status === "Approved") todayWithdrawals += req.amount;
     });
     
-    pendingRequests = adminData.depositRequests.filter(req => req.status === "Pending").length +
-                     adminData.withdrawalRequests.filter(req => req.status === "Pending").length +
-                     adminData.kycRequests.filter(req => req.status === "Pending").length;
+    pendingRequests = centralData.depositRequests.filter(req => req.status === "Pending").length +
+                     centralData.withdrawalRequests.filter(req => req.status === "Pending").length +
+                     centralData.kycRequests.filter(req => req.status === "Pending").length;
     
     document.getElementById('adminTotalUsers').innerText = totalUsers;
     document.getElementById('adminActiveUsers').innerText = activeUsers;
@@ -5865,7 +6299,7 @@ function updateAdminDashboard() {
     document.getElementById('adminTotalInvestments').innerText = `₹${totalInvestments}`;
     document.getElementById('adminPendingRequests').innerText = pendingRequests;
     document.getElementById('adminTotalCommission').innerText = `₹${totalCommission}`;
-    document.getElementById('adminPlatformBalance').innerText = `₹${adminData.platformBalance}`;
+    document.getElementById('adminPlatformBalance').innerText = `₹${centralData.platformBalance}`;
     document.getElementById('adminTodayUsers').innerText = todayUsers;
     document.getElementById('adminActiveToday').innerText = activeToday;
     document.getElementById('adminTodayDeposits').innerText = `₹${todayDeposits}`;
@@ -5875,7 +6309,7 @@ function updateAdminDashboard() {
 }
 
 function updateRecentActivity() {
-    const recentTransactions = [...adminData.transactions]
+    const recentTransactions = [...centralData.transactions]
         .sort((a, b) => new Date(b.date) - new Date(a.date))
         .slice(0, 10);
     
@@ -5916,15 +6350,19 @@ function createNewUser() {
         return;
     }
     
-    let userId;
-    do {
-        userId = 'USER' + Math.floor(1000 + Math.random() * 9000);
-    } while (userData[userId]);
+    // Check if referral exists
+    if (referralId && !centralData.users[referralId]) {
+        showToast('Referral ID not found', 'error');
+        return;
+    }
+    
+    // Generate unique user ID
+    const userId = 'USER' + String(centralData.userCounter++).padStart(4, '0');
     
     showLoading();
     
     setTimeout(() => {
-        userData[userId] = {
+        centralData.users[userId] = {
             name: name,
             userId: userId,
             password: password,
@@ -5970,32 +6408,45 @@ function createNewUser() {
             },
             sponsorId: referralId || "CAPITAL01",
             lastLogin: new Date().toLocaleString(),
-            createdByAdmin: true
+            createdBy: "Admin: " + (currentAdmin ? currentAdmin.id : 'System'),
+            deviceInfo: "Admin Created",
+            ipAddress: "Admin System"
         };
         
-        if (referralId && userData[referralId]) {
-            userData[userId].referredBy = referralId;
-            userData[referralId].referrals = (userData[referralId].referrals || 0) + 1;
+        // If referral exists, give referral commission
+        if (referralId && centralData.users[referralId]) {
+            const sponsor = centralData.users[referralId];
+            sponsor.referrals = (sponsor.referrals || 0) + 1;
             
-            const commission = (balance * adminData.settings.referralCommission / 100);
-            userData[referralId].balance += commission;
-            userData[referralId].referralIncome += commission;
-            userData[referralId].totalIncome += commission;
+            const commission = 10; // ₹10 referral bonus
+            sponsor.balance += commission;
+            sponsor.referralIncome += commission;
+            sponsor.totalIncome += commission;
             
-            adminData.transactions.push({
+            sponsor.referralIncomeList.push({
+                date: new Date().toLocaleString(),
+                referralId: userId,
+                name: name,
+                package: "None",
+                commission: "10%",
+                amount: commission,
+                status: 'Paid'
+            });
+            
+            centralData.transactions.push({
                 id: 'TRN' + Math.floor(Math.random() * 1000000),
                 userId: referralId,
                 type: 'Referral Commission',
                 amount: commission,
                 date: new Date().toLocaleString(),
                 status: 'Completed',
-                description: `Commission from ${userId} registration`
+                description: `Commission from ${userId} registration by admin`
             });
         }
         
-        saveUserData();
+        saveCentralData();
         
-        adminData.transactions.push({
+        centralData.transactions.push({
             id: 'TRN' + Math.floor(Math.random() * 1000000),
             userId: userId,
             type: 'User Created',
@@ -6005,7 +6456,8 @@ function createNewUser() {
             description: `User created by admin with ₹${balance} bonus`
         });
         
-        saveAdminData();
+        logSystemActivity(currentAdmin ? currentAdmin.id : 'System', 'User Created', `${userId} - ${name}`);
+        saveCentralData();
         
         document.getElementById('newUserName').value = '';
         document.getElementById('newUserMobile').value = '';
@@ -6023,9 +6475,10 @@ function createNewUser() {
 }
 
 function loadUsersTable() {
+    const users = centralData.users;
     let html = '';
-    for (const userId in userData) {
-        const user = userData[userId];
+    for (const userId in users) {
+        const user = users[userId];
         html += `
             <tr>
                 <td>${userId}</td>
@@ -6066,72 +6519,27 @@ function searchUsers() {
 }
 
 function viewUserDetails(userId) {
-    const user = userData[userId];
+    const user = centralData.users[userId];
     if (!user) return;
     
-    const html = `
-        <div class="user-info">
-            <div class="user-avatar">${user.name.charAt(0).toUpperCase()}</div>
-            <div class="user-details">
-                <h3>${user.name}</h3>
-                <p>User ID: ${userId}</p>
-                <p>Email: ${user.email}</p>
-                <p>Mobile: ${user.mobile}</p>
-                <p>Join Date: ${user.joinDate}</p>
-                <p>Last Login: ${user.lastLogin || 'Never'}</p>
-            </div>
-        </div>
-        
-        <div class="stats-row">
-            <div class="stat-item">
-                <div class="stat-value">₹${user.balance}</div>
-                <div class="stat-label">Current Balance</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-value">₹${user.fund}</div>
-                <div class="stat-label">Active Investment</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-value">₹${user.totalIncome}</div>
-                <div class="stat-label">Total Income</div>
-            </div>
-        </div>
-        
-        <h4 style="color:#a970ff; margin:20px 0 10px;">Account Information</h4>
-        <table class="info-table">
-            <tr><td>Package:</td><td>${user.package}</td></tr>
-            <tr><td>KYC Status:</td><td>${user.kyc}</td></tr>
-            <tr><td>Referrals:</td><td>${user.referrals}</td></tr>
-            <tr><td>Rank:</td><td>${user.rank}</td></tr>
-            <tr><td>Status:</td><td>${user.status}</td></tr>
-            <tr><td>Sponsor ID:</td><td>${user.sponsorId || 'N/A'}</td></tr>
-        </table>
-        
-        <div style="margin-top:30px; text-align:center;">
-            <button class="btn" onclick="editUser('${userId}')">
-                <i class="fas fa-edit"></i> Edit User
-            </button>
-            <button class="btn ${user.status === 'Active' ? 'btn-danger' : 'btn-success'}" 
-                    onclick="toggleUserStatus('${userId}')" 
-                    style="margin-left:15px;">
-                <i class="fas fa-${user.status === 'Active' ? 'ban' : 'check'}"></i> 
-                ${user.status === 'Active' ? 'Block User' : 'Activate User'}
-            </button>
-        </div>
-    `;
+    let details = `User Details:\n\nName: ${user.name}\nUser ID: ${userId}\nEmail: ${user.email}\nMobile: ${user.mobile}\n`;
+    details += `Balance: ₹${user.balance}\nFund: ₹${user.fund}\nPackage: ${user.package}\nKYC: ${user.kyc}\n`;
+    details += `Status: ${user.status}\nReferrals: ${user.referrals}\nTotal Income: ₹${user.totalIncome}\n`;
+    details += `Join Date: ${user.joinDate}\nLast Login: ${user.lastLogin || 'Never'}\nSponsor: ${user.sponsorId}\n`;
+    details += `Created By: ${user.createdBy || 'Self'}\nDevice: ${user.deviceInfo || 'Unknown'}`;
     
-    alert(`User Details:\n\nName: ${user.name}\nUser ID: ${userId}\nEmail: ${user.email}\nMobile: ${user.mobile}\nBalance: ₹${user.balance}\nPackage: ${user.package}\nKYC: ${user.kyc}\nStatus: ${user.status}\nLast Login: ${user.lastLogin || 'Never'}`);
+    alert(details);
 }
 
 function toggleUserStatus(userId) {
-    const user = userData[userId];
+    const user = centralData.users[userId];
     if (!user) return;
     
     if (confirm(`Are you sure you want to ${user.status === 'Active' ? 'block' : 'activate'} user ${userId}?`)) {
         user.status = user.status === 'Active' ? 'Blocked' : 'Active';
-        saveUserData();
+        saveCentralData();
         
-        adminData.transactions.push({
+        centralData.transactions.push({
             id: 'TRN' + Math.floor(Math.random() * 1000000),
             userId: userId,
             type: 'Status Change',
@@ -6141,7 +6549,8 @@ function toggleUserStatus(userId) {
             description: `User ${user.status === 'Active' ? 'activated' : 'blocked'} by admin`
         });
         
-        saveAdminData();
+        logSystemActivity(currentAdmin.id, 'User Status Changed', `${userId} - ${user.status}`);
+        saveCentralData();
         
         showToast(`User ${userId} has been ${user.status === 'Active' ? 'activated' : 'blocked'}`, 'success');
         
@@ -6155,7 +6564,7 @@ function addFundToUser(userId) {
     if (!amount || isNaN(amount) || amount <= 0) return;
     
     const parsedAmount = parseInt(amount);
-    const user = userData[userId];
+    const user = centralData.users[userId];
     if (!user) return;
     
     user.balance += parsedAmount;
@@ -6169,9 +6578,9 @@ function addFundToUser(userId) {
         balance: user.balance
     });
     
-    saveUserData();
+    saveCentralData();
     
-    adminData.transactions.push({
+    centralData.transactions.push({
         id: 'TRN' + Math.floor(Math.random() * 1000000),
         userId: userId,
         type: 'Admin Fund Added',
@@ -6181,7 +6590,8 @@ function addFundToUser(userId) {
         description: `Fund added by admin`
     });
     
-    saveAdminData();
+    logSystemActivity(currentAdmin.id, 'Fund Added to User', `${userId} - ₹${parsedAmount}`);
+    saveCentralData();
     
     showToast(`₹${parsedAmount} added to user ${userId}`, 'success');
     loadUsersTable();
@@ -6189,8 +6599,8 @@ function addFundToUser(userId) {
 }
 
 function loadDepositsTable() {
-    const pendingDeposits = adminData.depositRequests.filter(req => req.status === "Pending");
-    const approvedDeposits = adminData.depositRequests.filter(req => req.status === "Approved");
+    const pendingDeposits = centralData.depositRequests.filter(req => req.status === "Pending");
+    const approvedDeposits = centralData.depositRequests.filter(req => req.status === "Approved");
     
     document.getElementById('pendingDepositsCount').innerText = pendingDeposits.length;
     document.getElementById('pendingDepositsAmount').innerText = `₹${pendingDeposits.reduce((sum, req) => sum + req.amount, 0)}`;
@@ -6228,10 +6638,10 @@ function loadDepositsTable() {
 }
 
 function approveDeposit(requestId) {
-    const deposit = adminData.depositRequests.find(req => req.requestId === requestId);
+    const deposit = centralData.depositRequests.find(req => req.requestId === requestId);
     if (!deposit) return;
     
-    const user = userData[deposit.userId];
+    const user = centralData.users[deposit.userId];
     if (!user) return;
     
     if (confirm(`Approve deposit of ₹${deposit.amount} from ${user.name}?\nUPI TXN ID: ${deposit.upiTransactionId}\nUser UPI: ${deposit.userUpiId || 'Not provided'}`)) {
@@ -6252,7 +6662,7 @@ function approveDeposit(requestId) {
             upiTransactionId: deposit.upiTransactionId
         });
         
-        adminData.transactions.push({
+        centralData.transactions.push({
             id: deposit.requestId,
             userId: deposit.userId,
             type: 'Deposit',
@@ -6262,12 +6672,12 @@ function approveDeposit(requestId) {
             description: `Deposit via UPI, TXN ID: ${deposit.upiTransactionId}`
         });
         
-        adminData.platformBalance += deposit.amount;
+        centralData.platformBalance += deposit.amount;
         
-        saveUserData();
-        saveAdminData();
+        saveCentralData();
         
         showToast(`Deposit of ₹${deposit.amount} approved for ${user.name}`, 'success');
+        logSystemActivity(currentAdmin.id, 'Deposit Approved', `${deposit.userId} - ₹${deposit.amount}`);
         loadDepositsTable();
         updateAdminDashboard();
         updateNotificationCount();
@@ -6279,10 +6689,10 @@ function approveDeposit(requestId) {
 }
 
 function rejectDeposit(requestId) {
-    const deposit = adminData.depositRequests.find(req => req.requestId === requestId);
+    const deposit = centralData.depositRequests.find(req => req.requestId === requestId);
     if (!deposit) return;
     
-    const user = userData[deposit.userId];
+    const user = centralData.users[deposit.userId];
     if (!user) return;
     
     const reason = prompt("Enter reason for rejection:", "Incorrect payment details");
@@ -6293,7 +6703,7 @@ function rejectDeposit(requestId) {
     deposit.rejectedBy = currentAdmin.id;
     deposit.rejectedAt = new Date().toLocaleString();
     
-    adminData.transactions.push({
+    centralData.transactions.push({
         id: deposit.requestId,
         userId: deposit.userId,
         type: 'Deposit',
@@ -6303,17 +6713,18 @@ function rejectDeposit(requestId) {
         description: `Deposit rejected: ${reason}`
     });
     
-    saveAdminData();
+    saveCentralData();
     
     showToast(`Deposit request rejected`, 'success');
+    logSystemActivity(currentAdmin.id, 'Deposit Rejected', `${deposit.userId} - ${reason}`);
     loadDepositsTable();
     updateAdminDashboard();
     updateNotificationCount();
 }
 
 function loadWithdrawalsTable() {
-    const pendingWithdrawals = adminData.withdrawalRequests.filter(req => req.status === "Pending");
-    const processedWithdrawals = adminData.withdrawalRequests.filter(req => req.status !== "Pending");
+    const pendingWithdrawals = centralData.withdrawalRequests.filter(req => req.status === "Pending");
+    const processedWithdrawals = centralData.withdrawalRequests.filter(req => req.status !== "Pending");
     
     document.getElementById('pendingWithdrawalsCount').innerText = pendingWithdrawals.length;
     document.getElementById('pendingWithdrawalsAmount').innerText = `₹${pendingWithdrawals.reduce((sum, req) => sum + req.amount, 0)}`;
@@ -6350,13 +6761,13 @@ function loadWithdrawalsTable() {
 }
 
 function approveWithdrawal(requestId) {
-    const withdrawal = adminData.withdrawalRequests.find(req => req.requestId === requestId);
+    const withdrawal = centralData.withdrawalRequests.find(req => req.requestId === requestId);
     if (!withdrawal) return;
     
-    const user = userData[withdrawal.userId];
+    const user = centralData.users[withdrawal.userId];
     if (!user) return;
     
-    const fee = (withdrawal.amount * adminData.settings.withdrawalFee) / 100;
+    const fee = (withdrawal.amount * centralData.settings.withdrawalFee) / 100;
     const netAmount = withdrawal.amount - fee;
     
     if (confirm(`Approve withdrawal of ₹${withdrawal.amount} to ${user.name}?\nFee: ₹${fee}\nNet Amount: ₹${netAmount}`)) {
@@ -6374,7 +6785,7 @@ function approveWithdrawal(requestId) {
             userWithdrawal.transId = withdrawal.transactionId;
         }
         
-        adminData.transactions.push({
+        centralData.transactions.push({
             id: withdrawal.requestId,
             userId: withdrawal.userId,
             type: 'Withdrawal',
@@ -6384,12 +6795,12 @@ function approveWithdrawal(requestId) {
             description: `Withdrawal to ${withdrawal.method}, Fee: ₹${fee}`
         });
         
-        adminData.platformBalance += fee;
+        centralData.platformBalance += fee;
         
-        saveUserData();
-        saveAdminData();
+        saveCentralData();
         
         showToast(`Withdrawal of ₹${withdrawal.amount} approved for ${user.name}`, 'success');
+        logSystemActivity(currentAdmin.id, 'Withdrawal Approved', `${withdrawal.userId} - ₹${withdrawal.amount}`);
         loadWithdrawalsTable();
         updateAdminDashboard();
         updateNotificationCount();
@@ -6397,10 +6808,10 @@ function approveWithdrawal(requestId) {
 }
 
 function rejectWithdrawal(requestId) {
-    const withdrawal = adminData.withdrawalRequests.find(req => req.requestId === requestId);
+    const withdrawal = centralData.withdrawalRequests.find(req => req.requestId === requestId);
     if (!withdrawal) return;
     
-    const user = userData[withdrawal.userId];
+    const user = centralData.users[withdrawal.userId];
     if (!user) return;
     
     const reason = prompt("Enter reason for rejection:", "Insufficient KYC");
@@ -6418,7 +6829,7 @@ function rejectWithdrawal(requestId) {
         userWithdrawal.status = "Rejected";
     }
     
-    adminData.transactions.push({
+    centralData.transactions.push({
         id: withdrawal.requestId,
         userId: withdrawal.userId,
         type: 'Withdrawal',
@@ -6428,10 +6839,10 @@ function rejectWithdrawal(requestId) {
         description: `Withdrawal rejected: ${reason}`
     });
     
-    saveUserData();
-    saveAdminData();
+    saveCentralData();
     
     showToast(`Withdrawal request rejected, amount returned to user`, 'success');
+    logSystemActivity(currentAdmin.id, 'Withdrawal Rejected', `${withdrawal.userId} - ${reason}`);
     loadWithdrawalsTable();
     updateAdminDashboard();
     updateNotificationCount();
@@ -6439,7 +6850,7 @@ function rejectWithdrawal(requestId) {
 
 function loadPackageRequestsTable() {
     let html = '';
-    adminData.packageRequests.forEach(req => {
+    centralData.packageRequests.forEach(req => {
         html += `
             <tr>
                 <td>${req.requestId}</td>
@@ -6468,10 +6879,10 @@ function loadPackageRequestsTable() {
 }
 
 function approvePackage(requestId) {
-    const pkgReq = adminData.packageRequests.find(req => req.requestId === requestId);
+    const pkgReq = centralData.packageRequests.find(req => req.requestId === requestId);
     if (!pkgReq) return;
     
-    const user = userData[pkgReq.userId];
+    const user = centralData.users[pkgReq.userId];
     if (!user) return;
     
     if (confirm(`Approve ${pkgReq.package} package of ₹${pkgReq.amount} for ${user.name}?`)) {
@@ -6483,7 +6894,7 @@ function approvePackage(requestId) {
         user.fund += pkgReq.amount;
         
         const validityDate = new Date();
-        validityDate.setDate(validityDate.getDate() + adminData.settings.packageValidity);
+        validityDate.setDate(validityDate.getDate() + centralData.settings.packageValidity);
         
         user.activationHistory.push({
             id: pkgReq.requestId,
@@ -6492,10 +6903,10 @@ function approvePackage(requestId) {
             amount: pkgReq.amount,
             status: 'Active',
             validityTill: validityDate.toLocaleDateString('en-US'),
-            dailyIncome: (pkgReq.amount * adminData.settings.dailyTaskIncome / 100)
+            dailyIncome: (pkgReq.amount * centralData.settings.dailyTaskIncome / 100)
         });
         
-        adminData.transactions.push({
+        centralData.transactions.push({
             id: pkgReq.requestId,
             userId: pkgReq.userId,
             type: 'Package Activation',
@@ -6505,12 +6916,12 @@ function approvePackage(requestId) {
             description: `${pkgReq.package} Package activated`
         });
         
-        adminData.platformBalance += pkgReq.amount;
+        centralData.platformBalance += pkgReq.amount;
         
-        saveUserData();
-        saveAdminData();
+        saveCentralData();
         
         showToast(`Package ${pkgReq.package} approved for ${user.name}`, 'success');
+        logSystemActivity(currentAdmin.id, 'Package Approved', `${pkgReq.userId} - ${pkgReq.package}`);
         loadPackageRequestsTable();
         updateAdminDashboard();
         updateNotificationCount();
@@ -6518,10 +6929,10 @@ function approvePackage(requestId) {
 }
 
 function rejectPackage(requestId) {
-    const pkgReq = adminData.packageRequests.find(req => req.requestId === requestId);
+    const pkgReq = centralData.packageRequests.find(req => req.requestId === requestId);
     if (!pkgReq) return;
     
-    const user = userData[pkgReq.userId];
+    const user = centralData.users[pkgReq.userId];
     if (!user) return;
     
     const reason = prompt("Enter reason for rejection:", "Payment not verified");
@@ -6534,7 +6945,7 @@ function rejectPackage(requestId) {
     pkgReq.rejectedBy = currentAdmin.id;
     pkgReq.rejectedAt = new Date().toLocaleString();
     
-    adminData.transactions.push({
+    centralData.transactions.push({
         id: pkgReq.requestId,
         userId: pkgReq.userId,
         type: 'Package Request',
@@ -6544,19 +6955,19 @@ function rejectPackage(requestId) {
         description: `Package rejected: ${reason}`
     });
     
-    saveUserData();
-    saveAdminData();
+    saveCentralData();
     
     showToast(`Package request rejected, amount returned to user`, 'success');
+    logSystemActivity(currentAdmin.id, 'Package Rejected', `${pkgReq.userId} - ${reason}`);
     loadPackageRequestsTable();
     updateAdminDashboard();
     updateNotificationCount();
 }
 
 function loadKYCTable() {
-    const pendingKYC = adminData.kycRequests.filter(req => req.status === "Pending");
-    const verifiedKYC = adminData.kycRequests.filter(req => req.status === "Verified");
-    const rejectedKYC = adminData.kycRequests.filter(req => req.status === "Rejected");
+    const pendingKYC = centralData.kycRequests.filter(req => req.status === "Pending");
+    const verifiedKYC = centralData.kycRequests.filter(req => req.status === "Verified");
+    const rejectedKYC = centralData.kycRequests.filter(req => req.status === "Rejected");
     
     document.getElementById('pendingKYC').innerText = pendingKYC.length;
     document.getElementById('verifiedKYC').innerText = verifiedKYC.length;
@@ -6567,7 +6978,7 @@ function loadKYCTable() {
         html += `
             <tr>
                 <td>${kyc.userId}</td>
-                <td>${userData[kyc.userId]?.name || 'N/A'}</td>
+                <td>${centralData.users[kyc.userId]?.name || 'N/A'}</td>
                 <td>${kyc.aadharNumber}</td>
                 <td>${kyc.panNumber}</td>
                 <td>${kyc.submittedDate}</td>
@@ -6590,10 +7001,10 @@ function loadKYCTable() {
 }
 
 function verifyKYC(userId) {
-    const kyc = adminData.kycRequests.find(req => req.userId === userId && req.status === "Pending");
+    const kyc = centralData.kycRequests.find(req => req.userId === userId && req.status === "Pending");
     if (!kyc) return;
     
-    const user = userData[userId];
+    const user = centralData.users[userId];
     if (!user) return;
     
     if (confirm(`Verify KYC for ${user.name}?`)) {
@@ -6608,7 +7019,7 @@ function verifyKYC(userId) {
         user.totalIncome += bonus;
         user.todayIncome += bonus;
         
-        adminData.transactions.push({
+        centralData.transactions.push({
             id: 'TRN' + Math.floor(Math.random() * 1000000),
             userId: userId,
             type: 'KYC Bonus',
@@ -6618,10 +7029,10 @@ function verifyKYC(userId) {
             description: 'KYC verification bonus'
         });
         
-        saveUserData();
-        saveAdminData();
+        saveCentralData();
         
         showToast(`KYC verified for ${user.name}. ₹${bonus} bonus added.`, 'success');
+        logSystemActivity(currentAdmin.id, 'KYC Verified', `${userId}`);
         loadKYCTable();
         updateAdminDashboard();
         updateNotificationCount();
@@ -6629,10 +7040,10 @@ function verifyKYC(userId) {
 }
 
 function rejectKYC(userId) {
-    const kyc = adminData.kycRequests.find(req => req.userId === userId && req.status === "Pending");
+    const kyc = centralData.kycRequests.find(req => req.userId === userId && req.status === "Pending");
     if (!kyc) return;
     
-    const user = userData[userId];
+    const user = centralData.users[userId];
     if (!user) return;
     
     const reason = prompt("Enter reason for KYC rejection:", "Documents unclear");
@@ -6645,10 +7056,10 @@ function rejectKYC(userId) {
     
     user.kyc = "Rejected";
     
-    saveUserData();
-    saveAdminData();
+    saveCentralData();
     
     showToast(`KYC rejected for ${user.name}`, 'success');
+    logSystemActivity(currentAdmin.id, 'KYC Rejected', `${userId} - ${reason}`);
     loadKYCTable();
     updateAdminDashboard();
     updateNotificationCount();
@@ -6656,7 +7067,7 @@ function rejectKYC(userId) {
 
 function loadTransactionsTable() {
     let html = '';
-    adminData.transactions.forEach(trans => {
+    centralData.transactions.forEach(trans => {
         html += `
             <tr>
                 <td>${trans.id}</td>
@@ -6678,7 +7089,7 @@ function filterTransactions() {
     const toDate = document.getElementById('transactionToDate').value;
     const type = document.getElementById('transactionType').value;
     
-    let filtered = adminData.transactions;
+    let filtered = centralData.transactions;
     
     if (fromDate) {
         filtered = filtered.filter(trans => new Date(trans.date) >= new Date(fromDate));
@@ -6711,7 +7122,7 @@ function filterTransactions() {
 }
 
 function loadAdminSettings() {
-    const settings = adminData.settings;
+    const settings = centralData.settings;
     document.getElementById('minDeposit').value = settings.minDeposit;
     document.getElementById('minWithdrawal').value = settings.minWithdrawal;
     document.getElementById('withdrawalFee').value = settings.withdrawalFee;
@@ -6723,7 +7134,7 @@ function loadAdminSettings() {
 }
 
 function saveAdminSettings() {
-    adminData.settings = {
+    centralData.settings = {
         minDeposit: parseInt(document.getElementById('minDeposit').value) || 100,
         minWithdrawal: parseInt(document.getElementById('minWithdrawal').value) || 200,
         withdrawalFee: parseInt(document.getElementById('withdrawalFee').value) || 5,
@@ -6732,16 +7143,17 @@ function saveAdminSettings() {
         packageValidity: parseInt(document.getElementById('packageValidity').value) || 30,
         upiId: document.getElementById('adminUpiId').value || "capitalrise@ybl",
         bankDetails: document.getElementById('bankDetailsText').value || "",
-        qrCode: adminData.settings.qrCode
+        qrCode: centralData.settings.qrCode
     };
     
-    saveAdminData();
+    saveCentralData();
     showToast('Settings saved successfully!', 'success');
+    logSystemActivity(currentAdmin.id, 'Settings Updated');
 }
 
 function loadAdminProfile() {
-    document.getElementById('adminProfileId').value = adminData.adminProfile.id;
-    document.getElementById('adminProfileName').value = adminData.adminProfile.name;
+    document.getElementById('adminProfileId').value = centralData.superAdmin.id;
+    document.getElementById('adminProfileName').value = centralData.superAdmin.name;
 }
 
 function updateAdminProfile() {
@@ -6755,10 +7167,10 @@ function updateAdminProfile() {
         return;
     }
     
-    adminData.adminProfile.name = name;
+    centralData.superAdmin.name = name;
     
     if (currentPass || newPass || confirmPass) {
-        if (currentPass !== adminData.adminProfile.password) {
+        if (currentPass !== centralData.superAdmin.password) {
             showToast('Current password is incorrect', 'error');
             return;
         }
@@ -6773,22 +7185,121 @@ function updateAdminProfile() {
             return;
         }
         
-        adminData.adminProfile.password = newPass;
+        centralData.superAdmin.password = newPass;
         
         document.getElementById('adminCurrentPassword').value = '';
         document.getElementById('adminNewPassword').value = '';
         document.getElementById('adminConfirmPassword').value = '';
     }
     
-    saveAdminData();
+    saveCentralData();
     showToast('Admin profile updated successfully!', 'success');
+    logSystemActivity(currentAdmin.id, 'Admin Profile Updated');
 }
 
 function resetAdminPassword() {
     if (confirm('Reset admin password to default (admin123)?')) {
-        adminData.adminProfile.password = 'admin123';
-        saveAdminData();
+        centralData.superAdmin.password = 'admin123';
+        saveCentralData();
         showToast('Admin password reset to default (admin123)', 'success');
+        logSystemActivity(currentAdmin.id, 'Admin Password Reset');
+    }
+}
+
+// ================= EXPORT/IMPORT DATA FUNCTIONS =================
+function exportPlatformData() {
+    const dataStr = JSON.stringify(centralData, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    
+    const exportFileDefaultName = `capitalrise_central_data_${new Date().toISOString().split('T')[0]}.json`;
+    
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+    
+    showToast('Platform data exported successfully!', 'success');
+    logSystemActivity(currentAdmin.id, 'Data Exported');
+}
+
+function importPlatformData() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    
+    input.onchange = function(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const importedData = JSON.parse(e.target.result);
+                
+                // Validate imported data
+                if (importedData.users && importedData.settings) {
+                    if (confirm('This will replace all existing data. Are you sure?')) {
+                        centralData = importedData;
+                        saveCentralData();
+                        showToast('Platform data imported successfully!', 'success');
+                        logSystemActivity(currentAdmin.id, 'Data Imported');
+                        
+                        // Reload the page to reflect changes
+                        setTimeout(() => {
+                            location.reload();
+                        }, 1000);
+                    }
+                } else {
+                    showToast('Invalid data file format', 'error');
+                }
+            } catch (error) {
+                showToast('Error reading data file: ' + error.message, 'error');
+            }
+        };
+        reader.readAsText(file);
+    };
+    
+    input.click();
+}
+
+// ================= DATA BACKUP FUNCTIONS =================
+function createDataBackup() {
+    const backup = {
+        timestamp: new Date().toISOString(),
+        data: centralData,
+        stats: {
+            totalUsers: Object.keys(centralData.users).length,
+            totalTransactions: centralData.transactions.length,
+            platformBalance: centralData.platformBalance
+        }
+    };
+    
+    localStorage.setItem('capitalrise_backup_' + Date.now(), JSON.stringify(backup));
+    showToast('Data backup created successfully!', 'success');
+    logSystemActivity(currentAdmin.id, 'Backup Created');
+}
+
+function restoreFromBackup() {
+    const backupKeys = Object.keys(localStorage).filter(key => key.startsWith('capitalrise_backup_'));
+    
+    if (backupKeys.length === 0) {
+        showToast('No backups found', 'error');
+        return;
+    }
+    
+    // Get the latest backup
+    const latestKey = backupKeys.sort().reverse()[0];
+    const backup = JSON.parse(localStorage.getItem(latestKey));
+    
+    if (confirm(`Restore from backup created on ${new Date(backup.timestamp).toLocaleString()}?`)) {
+        centralData = backup.data;
+        saveCentralData();
+        showToast('Data restored from backup!', 'success');
+        logSystemActivity(currentAdmin.id, 'Backup Restored');
+        
+        setTimeout(() => {
+            location.reload();
+        }, 1000);
     }
 }
 
