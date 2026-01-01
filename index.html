@@ -6,6 +6,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+
     <style>
         * {
             margin: 0;
@@ -2045,6 +2052,9 @@
 </head>
 <body>
 
+<!-- ALL YOUR HTML CODE REMAINS EXACTLY THE SAME -->
+<!-- KEEP ALL YOUR HTML STRUCTURE AS IS -->
+
 <!-- ================= HEADER ================= -->
 <div class="header">
     <button class="mobile-menu-btn" onclick="toggleSidebar()">
@@ -2060,6 +2070,7 @@
     </div>
 </div>
 
+<!-- ... (ALL YOUR HTML CODE - KEEP IT ALL) ... -->
 <!-- Mobile Overlay -->
 <div class="mobile-overlay" id="mobileOverlay" onclick="toggleSidebar()"></div>
 
@@ -4143,7 +4154,25 @@ Name: CapitalRise Trading</textarea>
     </div>
 </div>
 
+<!-- At the end of your HTML, after all content, add the Firebase script -->
+
 <script>
+// ================= FIREBASE CONFIGURATION =================
+const firebaseConfig = {
+    apiKey: "AIzaSyCZXkgsJfCssK9fdfj98F2K1xNpPUbC-1o",
+    authDomain: "capitalrise-31891.firebaseapp.com",
+    projectId: "capitalrise-31891",
+    storageBucket: "capitalrise-31891.appspot.com",
+    messagingSenderId: "1032274028352",
+    appId: "1:1032274028352:web:29d634940efa957890bca5",
+    measurementId: "G-TG5CVHVDSW"
+  };
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+const storage = firebase.storage();
+
 // ================= GLOBAL VARIABLES =================
 let currentUser = null;
 let currentAdmin = null;
@@ -4151,220 +4180,191 @@ let selectedPaymentMethod = 'upi';
 let selectedPackageAmount = 0;
 let selectedPackageName = '';
 
-// Centralized storage key
-const STORAGE_KEY = 'capitalrise_platform_data';
-
-// Default data structure
-let platformData = {
-    // Super admin credentials (only one admin)
-    superAdmin: {
-        id: 'admin',
-        name: 'Super Admin',
-        password: 'admin123',
-        email: 'admin@capitalrise.com',
-        lastLogin: new Date().toLocaleString(),
-        ipAddress: '192.168.1.1'
-    },
-    
-    // All users data
-    users: {},
-    
-    // Admin settings
-    settings: {
-        minDeposit: 100,
-        minWithdrawal: 200,
-        withdrawalFee: 5,
-        referralCommission: 10,
-        dailyTaskIncome: 5,
-        packageValidity: 30,
-        upiId: "capitalrise@ybl",
-        bankDetails: "State Bank of India\nAccount: 123456789012\nIFSC: SBIN0001234\nName: CapitalRise Trading",
-        qrCode: null
-    },
-    
-    // All requests
-    depositRequests: [],
-    withdrawalRequests: [],
-    packageRequests: [],
-    kycRequests: [],
-    
-    // Platform stats
-    platformBalance: 10000,
-    transactions: [],
-    
-    // System counters
-    userCounter: 1
-};
-
 // Task Variables
 let taskClickCount = 0;
 const taskTotalClicksNeeded = 15;
 let taskCompleted = false;
 
-// ================= INITIALIZATION =================
-document.addEventListener('DOMContentLoaded', function() {
-    loadPlatformData();
-    checkSession();
-    setupEventListeners();
-    loadQRCode();
-    
-    // Check if admin is logged in
-    if (localStorage.getItem('capitalrise_admin_loggedin') === 'true') {
-        currentAdmin = platformData.superAdmin;
-        showAdminDashboard();
+// ================= AUTH STATE LISTENER =================
+auth.onAuthStateChanged((user) => {
+    if (user) {
+        // User is signed in
+        getUserData(user.uid).then(userData => {
+            if (userData) {
+                if (userData.role === 'admin') {
+                    currentAdmin = userData;
+                    showAdminDashboard();
+                } else {
+                    currentUser = userData;
+                    showDashboard();
+                    resetDailyTasksIfNeeded();
+                }
+            }
+        });
+    } else {
+        // User is signed out
+        currentUser = null;
+        currentAdmin = null;
+        showLogin();
     }
-    
-    // Demo credentials for testing
-    document.getElementById('loginUserID').value = 'USER0001';
-    document.getElementById('loginPassword').value = 'password123';
-    document.getElementById('adminUsername').value = 'admin';
-    document.getElementById('adminPassword').value = 'admin123';
-    
-    // Initialize notification count
-    updateNotificationCount();
 });
 
-function loadPlatformData() {
-    const storedData = localStorage.getItem(STORAGE_KEY);
-    if (storedData) {
-        platformData = JSON.parse(storedData);
-    } else {
-        // Initialize with demo user
-        platformData.users['USER0001'] = {
-            name: "Demo User",
-            userId: "USER0001",
-            password: "password123",
-            joinDate: new Date().toLocaleDateString('en-US'),
-            balance: 0,
-            fund: 0,
-            email: "demo@example.com",
-            mobile: "+91 9876543210",
-            status: "Active",
-            package: "None",
-            kyc: "Pending",
-            totalIncome: 0,
-            todayIncome: 0,
-            referralIncome: 0,
-            totalTasks: 0,
-            referrals: 0,
-            rank: "Beginner",
-            activationHistory: [],
-            fundHistory: [],
-            levelIncome: [],
-            referralIncomeList: [],
-            rewardIncome: [],
-            taskIncome: [],
-            withdrawalHistory: [],
-            tasks: [],
-            kycSubmitted: false,
-            bankDetails: {
-                accountNumber: "",
-                ifscCode: "",
-                bankName: ""
-            },
-            dailyTasks: {
-                lastTaskDate: "",
-                clicksCompleted: 0,
-                todayIncome: 0
-            },
-            sponsorId: "CAPITAL01",
-            lastLogin: new Date().toLocaleString()
+// ================= FIREBASE FUNCTIONS =================
+
+// Get user data from Firestore
+async function getUserData(userId) {
+    try {
+        const userDoc = await db.collection('users').doc(userId).get();
+        if (userDoc.exists) {
+            return { id: userId, ...userDoc.data() };
+        }
+        return null;
+    } catch (error) {
+        console.error("Error getting user data:", error);
+        return null;
+    }
+}
+
+// Save user data to Firestore
+async function saveUserData(userId, data) {
+    try {
+        await db.collection('users').doc(userId).set(data, { merge: true });
+        return true;
+    } catch (error) {
+        console.error("Error saving user data:", error);
+        return false;
+    }
+}
+
+// Add transaction to Firestore
+async function addTransaction(transactionData) {
+    try {
+        const transactionId = 'TRN' + Date.now() + Math.floor(Math.random() * 1000);
+        await db.collection('transactions').doc(transactionId).set({
+            ...transactionData,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        
+        // Also add to user's transactions subcollection
+        if (transactionData.userId) {
+            await db.collection('users').doc(transactionData.userId)
+                .collection('transactions').doc(transactionId).set(transactionData);
+        }
+        
+        return transactionId;
+    } catch (error) {
+        console.error("Error adding transaction:", error);
+        return null;
+    }
+}
+
+// Add request to Firestore
+async function addRequest(collection, requestData) {
+    try {
+        const requestId = 'REQ' + Date.now() + Math.floor(Math.random() * 1000);
+        await db.collection(collection).doc(requestId).set({
+            ...requestData,
+            requestId: requestId,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            status: 'pending'
+        });
+        return requestId;
+    } catch (error) {
+        console.error("Error adding request:", error);
+        return null;
+    }
+}
+
+// Update request status
+async function updateRequestStatus(collection, requestId, status, adminId = null) {
+    try {
+        const updateData = {
+            status: status,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         };
         
-        platformData.userCounter = 1;
-        savePlatformData();
-    }
-}
-
-function savePlatformData() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(platformData));
-}
-
-// ================= QR CODE FUNCTIONS =================
-function loadQRCode() {
-    const qrCode = platformData.settings.qrCode;
-    const qrImage = document.getElementById('qrCodeImage');
-    const currentQrImage = document.getElementById('currentQrImage');
-    const noQrMessage = document.getElementById('noQrMessage');
-    
-    if (qrCode) {
-        if (qrImage) {
-            qrImage.src = qrCode;
-            qrImage.style.display = 'block';
-            document.getElementById('qrCodeDisplay').style.display = 'block';
+        if (adminId) {
+            updateData.processedBy = adminId;
         }
-        if (currentQrImage) {
-            currentQrImage.src = qrCode;
-            currentQrImage.style.display = 'block';
-            noQrMessage.style.display = 'none';
+        
+        await db.collection(collection).doc(requestId).update(updateData);
+        return true;
+    } catch (error) {
+        console.error("Error updating request:", error);
+        return false;
+    }
+}
+
+// Get all users (admin function)
+async function getAllUsers() {
+    try {
+        const snapshot = await db.collection('users').get();
+        const users = [];
+        snapshot.forEach(doc => {
+            users.push({ id: doc.id, ...doc.data() });
+        });
+        return users;
+    } catch (error) {
+        console.error("Error getting users:", error);
+        return [];
+    }
+}
+
+// Get pending requests (admin function)
+async function getPendingRequests(collection) {
+    try {
+        const snapshot = await db.collection(collection)
+            .where('status', '==', 'pending')
+            .get();
+        const requests = [];
+        snapshot.forEach(doc => {
+            requests.push({ id: doc.id, ...doc.data() });
+        });
+        return requests;
+    } catch (error) {
+        console.error("Error getting pending requests:", error);
+        return [];
+    }
+}
+
+// Update user balance
+async function updateUserBalance(userId, amount, type = 'add') {
+    try {
+        const userRef = db.collection('users').doc(userId);
+        const userDoc = await userRef.get();
+        
+        if (!userDoc.exists) return false;
+        
+        const currentBalance = userDoc.data().balance || 0;
+        let newBalance;
+        
+        if (type === 'add') {
+            newBalance = currentBalance + amount;
+        } else if (type === 'subtract') {
+            if (currentBalance < amount) return false;
+            newBalance = currentBalance - amount;
         }
-    } else {
-        if (qrImage) {
-            qrImage.style.display = 'none';
-            document.getElementById('qrCodeDisplay').style.display = 'none';
-        }
-        if (currentQrImage) {
-            currentQrImage.style.display = 'none';
-            noQrMessage.style.display = 'block';
-        }
+        
+        await userRef.update({ balance: newBalance });
+        return newBalance;
+    } catch (error) {
+        console.error("Error updating balance:", error);
+        return false;
     }
 }
 
-function handleQRCodeUpload(input) {
-    const file = input.files[0];
-    if (!file) return;
-    
-    if (file.size > 1024 * 1024) {
-        showToast('File size should be less than 1MB', 'error');
-        return;
+// Upload file to Firebase Storage
+async function uploadFile(file, path) {
+    try {
+        const storageRef = storage.ref();
+        const fileRef = storageRef.child(path);
+        const snapshot = await fileRef.put(file);
+        const downloadURL = await snapshot.ref.getDownloadURL();
+        return downloadURL;
+    } catch (error) {
+        console.error("Error uploading file:", error);
+        return null;
     }
-    
-    if (!file.type.match('image.*')) {
-        showToast('Please upload an image file', 'error');
-        return;
-    }
-    
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        platformData.settings.qrCode = e.target.result;
-        savePlatformData();
-        loadQRCode();
-        showToast('QR code uploaded successfully!', 'success');
-        document.getElementById('qrCodeFileName').innerHTML = `<i class="fas fa-check-circle" style="color:#1db954"></i> ${file.name}`;
-    };
-    reader.readAsDataURL(file);
-}
-
-function removeQRCode() {
-    if (confirm('Are you sure you want to remove the QR code?')) {
-        platformData.settings.qrCode = null;
-        savePlatformData();
-        loadQRCode();
-        showToast('QR code removed successfully!', 'success');
-        document.getElementById('qrCodeFileName').innerText = 'Click to upload QR Code Image';
-        document.getElementById('qrCodeUpload').value = '';
-    }
-}
-
-// ================= MOBILE RESPONSIVE FUNCTIONS =================
-function toggleSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    const adminSidebar = document.getElementById('adminSidebar');
-    const overlay = document.getElementById('mobileOverlay');
-    
-    if (sidebar) sidebar.classList.toggle('active');
-    if (adminSidebar) adminSidebar.classList.toggle('active');
-    overlay.classList.toggle('active');
-}
-
-function closeSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    const adminSidebar = document.getElementById('adminSidebar');
-    const overlay = document.getElementById('mobileOverlay');
-    
-    if (sidebar) sidebar.classList.remove('active');
-    if (adminSidebar) adminSidebar.classList.remove('active');
-    overlay.classList.remove('active');
 }
 
 // ================= AUTH FUNCTIONS =================
@@ -4373,6 +4373,8 @@ function showLogin() {
     document.getElementById('registerPage').style.display = 'none';
     document.getElementById('forgotPasswordPage').style.display = 'none';
     document.getElementById('adminLoginPage').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'none';
+    document.getElementById('adminDashboard').style.display = 'none';
     closeSidebar();
 }
 
@@ -4380,14 +4382,6 @@ function showRegister() {
     document.getElementById('loginPage').style.display = 'none';
     document.getElementById('registerPage').style.display = 'flex';
     document.getElementById('forgotPasswordPage').style.display = 'none';
-    document.getElementById('adminLoginPage').style.display = 'none';
-    closeSidebar();
-}
-
-function showForgotPassword() {
-    document.getElementById('loginPage').style.display = 'none';
-    document.getElementById('registerPage').style.display = 'none';
-    document.getElementById('forgotPasswordPage').style.display = 'flex';
     document.getElementById('adminLoginPage').style.display = 'none';
     closeSidebar();
 }
@@ -4400,101 +4394,53 @@ function showAdminLogin() {
     closeSidebar();
 }
 
-function checkSession() {
-    const loggedInUserId = localStorage.getItem('capitalrise_current_user');
-    if (loggedInUserId && platformData.users[loggedInUserId]) {
-        currentUser = platformData.users[loggedInUserId];
-        showDashboard();
-    }
-}
-
-function login() {
-    const userId = document.getElementById('loginUserID').value.trim().toUpperCase();
+async function login() {
+    const email = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
     
-    if (!userId || !password) {
-        showToast('Please enter User ID and Password', 'error');
+    if (!email || !password) {
+        showToast('Please enter email and password', 'error');
         return;
     }
     
     showLoading();
     
-    setTimeout(() => {
-        const user = platformData.users[userId];
+    try {
+        const userCredential = await auth.signInWithEmailAndPassword(email, password);
+        const user = userCredential.user;
         
-        if (!user) {
-            hideLoading();
-            showToast('User ID not found', 'error');
-            return;
+        // Get user data from Firestore
+        const userData = await getUserData(user.uid);
+        
+        if (!userData) {
+            throw new Error('User data not found');
         }
         
-        if (user.password !== password) {
-            hideLoading();
-            showToast('Invalid password', 'error');
-            return;
-        }
-        
-        if (user.status === "Blocked") {
-            hideLoading();
+        if (userData.status === 'blocked') {
+            await auth.signOut();
             showToast('Your account has been blocked by admin', 'error');
             return;
         }
         
-        currentUser = user;
-        localStorage.setItem('capitalrise_current_user', userId);
-        
-        // Update last login
-        user.lastLogin = new Date().toLocaleString();
-        savePlatformData();
-        
-        hideLoading();
-        showDashboard();
-        showToast(`Welcome back, ${user.name}!`, 'success');
-        
-        // Reset daily tasks if new day
-        resetDailyTasksIfNeeded();
-        
         // Record login activity
-        platformData.transactions.push({
-            id: 'ACT' + Math.floor(Math.random() * 1000000),
-            userId: userId,
-            type: 'Login',
+        await addTransaction({
+            userId: user.uid,
+            type: 'login',
             amount: 0,
-            date: new Date().toLocaleString(),
-            status: 'Success',
+            status: 'success',
             description: 'User logged in'
         });
-        savePlatformData();
         
-        // Show registration popup for new users
-        if (user.balance === 0) {
-            setTimeout(() => {
-                showRegistrationPopup(user);
-            }, 1000);
-        }
-    }, 1000);
-}
-
-function adminLogin() {
-    const adminId = document.getElementById('adminUsername').value.trim();
-    const password = document.getElementById('adminPassword').value;
-    
-    if (adminId === platformData.superAdmin.id && password === platformData.superAdmin.password) {
-        currentAdmin = platformData.superAdmin;
-        localStorage.setItem('capitalrise_admin_loggedin', 'true');
+        hideLoading();
+        showToast(`Welcome back, ${userData.name}!`, 'success');
         
-        // Update admin last login
-        platformData.superAdmin.lastLogin = new Date().toLocaleString();
-        savePlatformData();
-        
-        showAdminDashboard();
-        showToast('Admin login successful!', 'success');
-    } else {
-        showToast('Invalid admin credentials', 'error');
+    } catch (error) {
+        hideLoading();
+        showToast(error.message, 'error');
     }
 }
 
-function register() {
+async function register() {
     const name = document.getElementById('regFullName').value.trim();
     const mobile = document.getElementById('regMobile').value.trim();
     const email = document.getElementById('regEmail').value.trim();
@@ -4517,81 +4463,65 @@ function register() {
         return;
     }
     
-    // Generate unique user ID
-    const userId = 'USER' + String(platformData.userCounter++).padStart(4, '0');
-    
     showLoading();
     
-    setTimeout(() => {
-        platformData.users[userId] = {
+    try {
+        // Create user in Firebase Auth
+        const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+        const user = userCredential.user;
+        
+        // Generate user ID
+        const userId = 'USER' + Date.now().toString().slice(-6);
+        
+        // Create user data object
+        const userData = {
             name: name,
             userId: userId,
-            password: password,
-            joinDate: new Date().toLocaleDateString('en-US'),
-            balance: 50, // ₹50 bonus for new registration
-            fund: 0,
             email: email,
             mobile: mobile,
-            status: "Active",
-            package: "None",
-            kyc: "Pending",
+            joinDate: new Date().toLocaleDateString('en-US'),
+            balance: 50, // Registration bonus
+            fund: 0,
+            status: "active",
+            package: "none",
+            kyc: "pending",
             totalIncome: 0,
             todayIncome: 0,
             referralIncome: 0,
             totalTasks: 0,
             referrals: 0,
-            rank: "Beginner",
-            activationHistory: [],
-            fundHistory: [],
-            levelIncome: [],
-            referralIncomeList: [],
-            rewardIncome: [],
-            taskIncome: [],
-            withdrawalHistory: [],
-            tasks: [],
-            kycSubmitted: false,
-            bankDetails: {
-                accountNumber: "",
-                ifscCode: "",
-                bankName: ""
-            },
-            dailyTasks: {
-                lastTaskDate: "",
-                clicksCompleted: 0,
-                todayIncome: 0
-            },
+            rank: "beginner",
             sponsorId: sponsorId || "CAPITAL01",
-            lastLogin: new Date().toLocaleString()
+            role: "user",
+            lastLogin: new Date().toLocaleString(),
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
         };
         
+        // Save user data to Firestore
+        await saveUserData(user.uid, userData);
+        
         // Add registration bonus transaction
-        platformData.users[userId].fundHistory.push({
-            date: new Date().toLocaleString(),
-            type: 'Registration Bonus',
+        await addTransaction({
+            userId: user.uid,
+            type: 'registration_bonus',
             amount: 50,
-            method: 'System',
-            status: 'Success',
-            balance: 50
+            status: 'success',
+            description: 'Registration bonus'
         });
         
-        savePlatformData();
+        // Record registration
+        await addTransaction({
+            userId: user.uid,
+            type: 'registration',
+            amount: 50,
+            status: 'success',
+            description: 'New user registration'
+        });
         
         hideLoading();
         
         // Show registration popup
-        showRegistrationPopup(platformData.users[userId]);
-        
-        // Record registration
-        platformData.transactions.push({
-            id: 'REG' + Math.floor(Math.random() * 1000000),
-            userId: userId,
-            type: 'Registration',
-            amount: 50,
-            date: new Date().toLocaleString(),
-            status: 'Success',
-            description: 'New user registration with ₹50 bonus'
-        });
-        savePlatformData();
+        showRegistrationPopup(userData);
         
         // Clear form
         document.getElementById('regFullName').value = '';
@@ -4600,45 +4530,62 @@ function register() {
         document.getElementById('regPassword').value = '';
         document.getElementById('regConfirmPassword').value = '';
         document.getElementById('regSponsorID').value = '';
-    }, 1500);
+        
+    } catch (error) {
+        hideLoading();
+        showToast(error.message, 'error');
+    }
 }
 
-function showRegistrationPopup(user) {
-    document.getElementById('popupUserId').innerText = user.userId;
-    document.getElementById('popupPassword').innerText = '********';
-    document.getElementById('popupSponsorId').innerText = user.sponsorId || 'CAPITAL01';
-    document.getElementById('popupJoinDate').innerText = user.joinDate;
+async function adminLogin() {
+    const adminId = document.getElementById('adminUsername').value.trim();
+    const password = document.getElementById('adminPassword').value;
     
-    document.getElementById('popupOverlay').style.display = 'block';
-    document.getElementById('registrationPopup').style.display = 'block';
-}
-
-function closeRegistrationPopup() {
-    document.getElementById('popupOverlay').style.display = 'none';
-    document.getElementById('registrationPopup').style.display = 'none';
+    if (!adminId || !password) {
+        showToast('Please enter admin credentials', 'error');
+        return;
+    }
     
-    if (currentUser) {
-        showDashboard();
+    showLoading();
+    
+    try {
+        // Admin login with special admin credentials
+        // You can create a separate admin login or use special admin accounts
+        const adminEmail = `${adminId}@capitalrise.com`;
+        const userCredential = await auth.signInWithEmailAndPassword(adminEmail, password);
+        const user = userCredential.user;
+        
+        const userData = await getUserData(user.uid);
+        
+        if (!userData || userData.role !== 'admin') {
+            await auth.signOut();
+            showToast('Invalid admin credentials', 'error');
+            return;
+        }
+        
+        currentAdmin = userData;
+        showAdminDashboard();
+        showToast('Admin login successful!', 'success');
+        
+    } catch (error) {
+        hideLoading();
+        showToast('Invalid admin credentials', 'error');
     }
 }
 
-function logout() {
+async function logout() {
     if (confirm('Are you sure you want to logout?')) {
-        currentUser = null;
-        localStorage.removeItem('capitalrise_current_user');
-        location.reload();
+        try {
+            await auth.signOut();
+            currentUser = null;
+            currentAdmin = null;
+            showToast('Logged out successfully', 'success');
+        } catch (error) {
+            showToast('Error logging out', 'error');
+        }
     }
 }
 
-function adminLogout() {
-    if (confirm('Are you sure you want to logout?')) {
-        currentAdmin = null;
-        localStorage.removeItem('capitalrise_admin_loggedin');
-        location.reload();
-    }
-}
-
-// ================= USER DASHBOARD FUNCTIONS =================
 function showDashboard() {
     document.getElementById('loginPage').style.display = 'none';
     document.getElementById('registerPage').style.display = 'none';
@@ -4655,456 +4602,39 @@ function showAdminDashboard() {
     document.getElementById('adminLoginPage').style.display = 'none';
     document.getElementById('dashboard').style.display = 'none';
     document.getElementById('adminDashboard').style.display = 'block';
-    
     updateAdminDashboard();
-    loadQRCode();
     closeSidebar();
 }
 
-function showPage(pageId) {
-    const pages = document.querySelectorAll('#dashboard .page');
-    pages.forEach(page => {
-        page.classList.remove('active');
-    });
-    
-    document.getElementById(pageId).classList.add('active');
-    
-    const sidebarItems = document.querySelectorAll('#dashboard .sidebar li');
-    sidebarItems.forEach(item => {
-        item.classList.remove('active');
-    });
-    
-    const pageMap = {
-        'dashboardPage': 0,
-        'activationPage': 1,
-        'activationHistoryPage': 2,
-        'profilePage': 3,
-        'kycPage': 4,
-        'changePasswordPage': 5,
-        'addFundPage': 6,
-        'fundReportPage': 7,
-        'levelIncomePage': 8,
-        'referralIncomePage': 9,
-        'rewardIncomePage': 10,
-        'roiIncomePage': 11,
-        'withdrawalPage': 12,
-        'withdrawalReportPage': 13,
-        'taskPage': 14
-    };
-    
-    if (pageMap[pageId] !== undefined) {
-        sidebarItems[pageMap[pageId]].classList.add('active');
-    }
-    
-    if (pageId === 'taskPage') {
-        loadTaskPage();
-    } else if (pageId === 'activationHistoryPage') {
-        updateActivationHistoryTable();
-    } else if (pageId === 'fundReportPage') {
-        updateFundReportTable();
-    } else if (pageId === 'withdrawalReportPage') {
-        updateWithdrawalTables();
-    }
-    
-    closeSidebar();
-}
-
-function showAdminPage(pageId) {
-    const pages = document.querySelectorAll('#adminDashboard .page');
-    pages.forEach(page => {
-        page.classList.remove('active');
-    });
-    
-    document.getElementById(pageId).classList.add('active');
-    
-    const sidebarItems = document.querySelectorAll('#adminDashboard .sidebar li');
-    sidebarItems.forEach(item => {
-        item.classList.remove('active');
-    });
-    
-    const pageMap = {
-        'adminDashboardPage': 0,
-        'adminUsersPage': 1,
-        'adminDepositsPage': 2,
-        'adminWithdrawalsPage': 3,
-        'adminPackageRequestsPage': 4,
-        'adminKYCVerificationPage': 5,
-        'adminTransactionsPage': 6,
-        'adminSettingsPage': 7,
-        'adminProfilePage': 8
-    };
-    
-    if (pageMap[pageId] !== undefined) {
-        sidebarItems[pageMap[pageId]].classList.add('active');
-    }
-    
-    switch(pageId) {
-        case 'adminUsersPage':
-            loadUsersTable();
-            break;
-        case 'adminDepositsPage':
-            loadDepositsTable();
-            break;
-        case 'adminWithdrawalsPage':
-            loadWithdrawalsTable();
-            break;
-        case 'adminPackageRequestsPage':
-            loadPackageRequestsTable();
-            break;
-        case 'adminKYCVerificationPage':
-            loadKYCTable();
-            break;
-        case 'adminTransactionsPage':
-            loadTransactionsTable();
-            break;
-        case 'adminSettingsPage':
-            loadAdminSettings();
-            loadQRCode();
-            break;
-        case 'adminProfilePage':
-            loadAdminProfile();
-            break;
-    }
-    
-    closeSidebar();
-}
-
-function updateDashboard() {
+// ================= USER FUNCTIONS =================
+async function updateDashboard() {
     if (!currentUser) return;
     
-    document.getElementById('userName').innerText = currentUser.name;
-    document.getElementById('userId').innerText = currentUser.userId;
-    document.getElementById('joinDate').innerText = currentUser.joinDate;
-    document.getElementById('userAvatar').innerText = currentUser.name.charAt(0).toUpperCase();
-    document.getElementById('userBalance').innerText = `₹${currentUser.balance}`;
-    document.getElementById('userFund').innerText = `₹${currentUser.fund}`;
-    document.getElementById('totalIncome').innerText = `₹${currentUser.totalIncome}`;
-    document.getElementById('todayIncome').innerText = `₹${currentUser.todayIncome}`;
-    document.getElementById('referralIncome').innerText = `₹${currentUser.referralIncome}`;
-    document.getElementById('totalTasks').innerText = currentUser.totalTasks;
-    document.getElementById('referralCount').innerText = currentUser.referrals;
-    document.getElementById('userRank').innerText = currentUser.rank;
-    
-    // Update user status badge
-    const statusBadge = document.getElementById('userStatusBadge');
-    if (currentUser.package === "None") {
-        statusBadge.innerText = "Inactive";
-        statusBadge.style.background = "linear-gradient(90deg, #ff6b6b, #ff4757)";
-    } else {
-        statusBadge.innerText = "Active";
-        statusBadge.style.background = "linear-gradient(90deg, #1db954, #22e06d)";
+    try {
+        const userDoc = await db.collection('users').doc(currentUser.id).get();
+        if (userDoc.exists) {
+            currentUser = { id: userDoc.id, ...userDoc.data() };
+        }
+        
+        // Update UI with user data
+        document.getElementById('userName').innerText = currentUser.name;
+        document.getElementById('userId').innerText = currentUser.userId;
+        document.getElementById('userBalance').innerText = `₹${currentUser.balance}`;
+        document.getElementById('userFund').innerText = `₹${currentUser.fund}`;
+        document.getElementById('totalIncome').innerText = `₹${currentUser.totalIncome}`;
+        document.getElementById('referralCount').innerText = currentUser.referrals || 0;
+        
+        // Update referral link
+        const refLink = `https://capitalrise.com/register?ref=${currentUser.userId}`;
+        document.getElementById('refLink').value = refLink;
+        
+    } catch (error) {
+        console.error("Error updating dashboard:", error);
     }
-    
-    const refLink = `https://capitalrise.com/register?ref=${currentUser.userId}`;
-    document.getElementById('refLink').value = refLink;
-    
-    // Update profile page
-    document.getElementById('profileName').value = currentUser.name;
-    document.getElementById('profileUserId').value = currentUser.userId;
-    document.getElementById('profileEmail').value = currentUser.email;
-    document.getElementById('profileMobile').value = currentUser.mobile;
-    document.getElementById('profileJoinDate').value = currentUser.joinDate;
-    document.getElementById('profileStatus').value = currentUser.status;
-    document.getElementById('profilePackage').value = currentUser.package;
-    document.getElementById('profileKYC').value = currentUser.kyc;
-    document.getElementById('profileRefLink').value = refLink;
-    
-    document.getElementById('currentPackage').innerText = currentUser.package;
-    document.getElementById('activationFund').innerText = `₹${currentUser.fund}`;
-    document.getElementById('activationStatus').innerText = currentUser.package === "None" ? "Inactive" : "Active";
-    document.getElementById('kycStatusText').innerText = currentUser.kyc;
-    document.getElementById('kycStatusText').style.color = currentUser.kyc === "Approved" ? "#1db954" : 
-                                                         currentUser.kyc === "Pending" ? "#ffc107" : "#ff4757";
-    
-    // Update Add Fund page balance
-    document.getElementById('walletBalance').innerText = `₹${currentUser.balance}`;
-    document.getElementById('withdrawBalance').innerText = `₹${currentUser.balance}`;
-    
-    // Update withdrawal page
-    document.getElementById('withdrawBalance').innerText = `₹${currentUser.balance}`;
-    
-    updateAllTables();
 }
 
-// ================= TASK PAGE FUNCTIONS =================
-function loadTaskPage() {
+async function activatePackageRequest(amount, packageName) {
     if (!currentUser) return;
-    
-    resetDailyTasksIfNeeded();
-    
-    // Load task progress from user data
-    taskClickCount = currentUser.dailyTasks.clicksCompleted || 0;
-    taskCompleted = taskClickCount >= taskTotalClicksNeeded;
-    
-    // Update UI
-    updateTaskUI();
-    
-    // Calculate and display rewards
-    updateTaskRewards();
-    
-    // Add event listener for click button
-    const clickButton = document.getElementById('task-click-button');
-    if (clickButton) {
-        clickButton.onclick = handleTaskClick;
-    }
-}
-
-function updateTaskUI() {
-    const completedCount = document.getElementById('task-completed-count');
-    const pendingCount = document.getElementById('task-pending-count');
-    const taskCheckbox = document.getElementById('enhanced-task-checkbox');
-    const taskCard = document.getElementById('enhanced-click-task');
-    const clickButton = document.getElementById('task-click-button');
-    const progressText = document.getElementById('task-progress-text');
-    const progressFill = document.getElementById('task-progress-fill');
-    const completedText = document.querySelector('.task-completed-text');
-    const todayEarned = document.getElementById('task-today-earned');
-    
-    // Update task counts
-    if (taskCompleted) {
-        completedCount.innerText = "1";
-        pendingCount.innerText = "0";
-    } else {
-        completedCount.innerText = "0";
-        pendingCount.innerText = "15";
-    }
-    
-    // Update progress text
-    progressText.textContent = `Progress: ${taskClickCount}/${taskTotalClicksNeeded} clicks`;
-    
-    // Update progress bar
-    const progressPercentage = (taskClickCount / taskTotalClicksNeeded) * 100;
-    progressFill.style.width = `${progressPercentage}%`;
-    
-    // Update task completion status
-    if (taskCompleted) {
-        taskCheckbox.classList.add('completed');
-        taskCard.classList.add('completed');
-        if (clickButton) {
-            clickButton.disabled = true;
-            clickButton.textContent = "Task Completed!";
-        }
-        completedText.style.display = "block";
-        todayEarned.innerText = currentUser.dailyTasks.todayIncome.toFixed(2);
-    } else {
-        taskCheckbox.classList.remove('completed');
-        taskCard.classList.remove('completed');
-        if (clickButton) {
-            clickButton.disabled = false;
-            clickButton.textContent = "Click Here";
-        }
-        completedText.style.display = "none";
-    }
-}
-
-function updateTaskRewards() {
-    if (!currentUser) return;
-    
-    // Calculate reward (5% of fund divided by 15 clicks)
-    let perClickReward = 0;
-    let dailyReward = 0;
-    
-    if (currentUser.package !== "None" && currentUser.fund > 0) {
-        dailyReward = currentUser.fund * (platformData.settings.dailyTaskIncome / 100);
-        perClickReward = dailyReward / taskTotalClicksNeeded;
-    }
-    
-    const earnedToday = currentUser.dailyTasks.todayIncome || 0;
-    
-    // Update reward displays
-    document.getElementById('per-click-reward').innerText = `₹${perClickReward.toFixed(2)}`;
-    document.getElementById('daily-reward').innerText = `₹${dailyReward.toFixed(2)}`;
-    document.getElementById('today-earned').innerText = `₹${earnedToday.toFixed(2)}`;
-    
-    // Update task stats
-    document.getElementById('taskDailyIncome').innerText = `₹${dailyReward.toFixed(2)}`;
-    document.getElementById('taskPerClick').innerText = `₹${perClickReward.toFixed(2)}`;
-    document.getElementById('taskCompletedToday').innerText = `${taskClickCount}/15`;
-    
-    // Update modal values
-    document.getElementById('modal-per-click-reward').innerText = `₹${perClickReward.toFixed(2)}`;
-    document.getElementById('modal-daily-reward').innerText = `₹${dailyReward.toFixed(2)}`;
-    document.getElementById('modal-today-earned').innerText = `₹${earnedToday.toFixed(2)}`;
-    document.getElementById('modal-click-formula').innerText = `₹${dailyReward.toFixed(2)} ÷ 15 = ₹${perClickReward.toFixed(2)} per click`;
-}
-
-function handleTaskClick() {
-    if (!currentUser) {
-        showToast("Please login to complete tasks", 'error');
-        return;
-    }
-    
-    // Check if user has active package
-    if (currentUser.package === "None" || currentUser.package === "Pending") {
-        showToast("Please activate a package first to start tasks", 'error');
-        showPage('activationPage');
-        return;
-    }
-    
-    // Check if package is expired
-    const activePackage = currentUser.activationHistory.find(pkg => 
-        pkg.status === "Active" && new Date(pkg.validityTill) > new Date()
-    );
-    
-    if (!activePackage) {
-        showToast("Your package has expired. Please renew your package.", 'error');
-        showPage('activationPage');
-        return;
-    }
-    
-    if (taskCompleted) {
-        showToast("You have already completed today's tasks!", 'info');
-        return;
-    }
-    
-    // Show loading animation
-    const clickButton = document.getElementById('task-click-button');
-    clickButton.disabled = true;
-    clickButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
-    
-    setTimeout(() => {
-        // Increment click count
-        taskClickCount++;
-        currentUser.dailyTasks.clicksCompleted = taskClickCount;
-        
-        // Check if task is completed
-        if (taskClickCount >= taskTotalClicksNeeded) {
-            taskCompleted = true;
-        }
-        
-        // Calculate reward
-        const dailyReward = currentUser.fund * (platformData.settings.dailyTaskIncome / 100);
-        const perClickReward = dailyReward / taskTotalClicksNeeded;
-        
-        // Update user data
-        currentUser.dailyTasks.todayIncome += perClickReward;
-        currentUser.balance += perClickReward;
-        currentUser.totalIncome += perClickReward;
-        currentUser.todayIncome += perClickReward;
-        currentUser.totalTasks++;
-        
-        // Add to task income history
-        if (!currentUser.taskIncome) currentUser.taskIncome = [];
-        currentUser.taskIncome.push({
-            date: new Date().toLocaleString(),
-            amount: perClickReward,
-            clickNumber: taskClickCount,
-            package: currentUser.package,
-            fund: currentUser.fund
-        });
-        
-        // Save data
-        platformData.users[currentUser.userId] = currentUser;
-        savePlatformData();
-        
-        // Record transaction
-        platformData.transactions.push({
-            id: 'TASK' + Math.floor(Math.random() * 1000000),
-            userId: currentUser.userId,
-            type: 'Task Income',
-            amount: perClickReward,
-            date: new Date().toLocaleString(),
-            status: 'Completed',
-            description: `Daily click task #${taskClickCount} from ${currentUser.package} package`
-        });
-        savePlatformData();
-        
-        // Update UI
-        updateTaskUI();
-        updateTaskRewards();
-        
-        // Update dashboard
-        updateDashboard();
-        
-        // Show feedback
-        if (taskCompleted) {
-            showToast(`Congratulations! Daily tasks completed. ₹${(perClickReward * taskTotalClicksNeeded).toFixed(2)} added to your balance.`, 'success');
-            celebrateTaskCompletion();
-        } else {
-            showToast(`Click completed! ₹${perClickReward.toFixed(2)} added to your balance. ${taskTotalClicksNeeded - taskClickCount} clicks remaining.`, 'success');
-        }
-        
-        // Re-enable button if task not completed
-        if (!taskCompleted) {
-            clickButton.disabled = false;
-            clickButton.textContent = "Click Here";
-        }
-    }, 500);
-}
-
-function celebrateTaskCompletion() {
-    const colors = ['#6a11cb', '#2575fc', '#ff6b6b', '#4ecdc4', '#ffe66d'];
-    
-    for (let i = 0; i < 100; i++) {
-        const confetti = document.createElement('div');
-        confetti.className = 'task-confetti';
-        
-        const left = Math.random() * 100;
-        confetti.style.left = `${left}vw`;
-        
-        const color = colors[Math.floor(Math.random() * colors.length)];
-        confetti.style.backgroundColor = color;
-        
-        const size = Math.random() * 10 + 5;
-        confetti.style.width = `${size}px`;
-        confetti.style.height = `${size}px`;
-        
-        const duration = Math.random() * 3 + 2;
-        const delay = Math.random() * 2;
-        confetti.style.animation = `taskConfettiRain ${duration}s ease-out ${delay}s forwards`;
-        
-        document.body.appendChild(confetti);
-        
-        setTimeout(() => {
-            confetti.remove();
-        }, (duration + delay) * 1000);
-    }
-}
-
-function resetDailyTasksIfNeeded() {
-    if (!currentUser) return;
-    
-    const today = new Date().toLocaleDateString();
-    if (!currentUser.dailyTasks.lastTaskDate || currentUser.dailyTasks.lastTaskDate !== today) {
-        currentUser.dailyTasks = {
-            lastTaskDate: today,
-            clicksCompleted: 0,
-            todayIncome: 0
-        };
-        savePlatformData();
-        
-        // Reset task variables
-        taskClickCount = 0;
-        taskCompleted = false;
-    } else {
-        // Load existing progress
-        taskClickCount = currentUser.dailyTasks.clicksCompleted || 0;
-        taskCompleted = taskClickCount >= taskTotalClicksNeeded;
-    }
-}
-
-function showTaskModal() {
-    document.getElementById('taskDetailsModal').style.display = "flex";
-}
-
-function closeTaskModal() {
-    document.getElementById('taskDetailsModal').style.display = "none";
-}
-
-// ================= PACKAGE FUNCTIONS =================
-function activatePackageRequest(amount, packageName) {
-    selectedPackageAmount = amount;
-    selectedPackageName = packageName;
-    
-    // Check if user already has active package
-    const activePackage = currentUser.activationHistory.find(pkg => 
-        pkg.status === "Active" && new Date(pkg.validityTill) > new Date()
-    );
-    
-    if (activePackage) {
-        showToast(`You already have an active package: ${activePackage.package}. Validity till: ${activePackage.validityTill}.`, 'info');
-        return;
-    }
     
     // Check if user has sufficient funds
     if (currentUser.balance < amount) {
@@ -5113,230 +4643,142 @@ function activatePackageRequest(amount, packageName) {
         return;
     }
     
-    // Ask for confirmation
-    if (confirm(`Are you sure you want to activate ${packageName} package for ₹${amount}?\nThis package will be active for ${platformData.settings.packageValidity} days.`)) {
-        showLoading();
+    if (!confirm(`Are you sure you want to activate ${packageName} package for ₹${amount}?`)) {
+        return;
+    }
+    
+    showLoading();
+    
+    try {
+        // Deduct amount from balance
+        await updateUserBalance(currentUser.id, amount, 'subtract');
         
-        setTimeout(() => {
-            // Calculate validity date
-            const validityDate = new Date();
-            validityDate.setDate(validityDate.getDate() + platformData.settings.packageValidity);
-            
-            // Create activation record
-            const activationId = 'ACT' + Math.floor(Math.random() * 1000000);
-            const activationRecord = {
-                id: activationId,
-                date: new Date().toLocaleString(),
-                package: packageName,
-                amount: amount,
-                status: "Active",
-                validityTill: validityDate.toLocaleDateString('en-US'),
-                dailyIncome: (amount * platformData.settings.dailyTaskIncome / 100)
-            };
-            
-            // Update user data
-            currentUser.balance -= amount;
-            currentUser.fund += amount;
-            currentUser.package = packageName;
-            currentUser.activationHistory.push(activationRecord);
-            
-            // Save data
-            platformData.users[currentUser.userId] = currentUser;
-            savePlatformData();
-            
-            // Record transaction
-            platformData.transactions.push({
-                id: activationId,
-                userId: currentUser.userId,
-                type: 'Package Activation',
-                amount: amount,
-                date: new Date().toLocaleString(),
-                status: 'Completed',
-                description: `${packageName} package activated for ${platformData.settings.packageValidity} days`
-            });
-            
-            savePlatformData();
-            
-            hideLoading();
-            showToast(`${packageName} package activated successfully! You can now start daily tasks.`, 'success');
-            
-            // Update dashboard
-            updateDashboard();
-            updateNotificationCount();
-            
-            // Show task page
-            showPage('taskPage');
-        }, 1000);
+        // Calculate validity date (30 days)
+        const validityDate = new Date();
+        validityDate.setDate(validityDate.getDate() + 30);
+        
+        // Create package activation record
+        const packageData = {
+            userId: currentUser.id,
+            userName: currentUser.name,
+            userEmail: currentUser.email,
+            package: packageName,
+            amount: amount,
+            validityTill: validityDate.toISOString(),
+            status: 'active',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        
+        // Add to user's packages
+        await db.collection('users').doc(currentUser.id)
+            .collection('packages').add(packageData);
+        
+        // Update user's package info
+        await db.collection('users').doc(currentUser.id).update({
+            package: packageName,
+            fund: firebase.firestore.FieldValue.increment(amount)
+        });
+        
+        // Add transaction
+        await addTransaction({
+            userId: currentUser.id,
+            type: 'package_activation',
+            amount: amount,
+            status: 'success',
+            description: `${packageName} package activated`
+        });
+        
+        // Refresh user data
+        const userDoc = await db.collection('users').doc(currentUser.id).get();
+        currentUser = { id: userDoc.id, ...userDoc.data() };
+        
+        hideLoading();
+        showToast(`${packageName} package activated successfully!`, 'success');
+        updateDashboard();
+        
+    } catch (error) {
+        hideLoading();
+        showToast(error.message, 'error');
     }
 }
 
-function checkFundsAndActivate() {
-    const amount = parseInt(document.getElementById('activationPackageSelect').value);
-    const packageName = document.getElementById('activationPackageSelect').options[document.getElementById('activationPackageSelect').selectedIndex].text.split(' - ')[0];
-    
-    if (currentUser.balance < amount) {
-        document.getElementById('fundCheckMessage').style.display = 'block';
-        document.getElementById('activationButtonSection').innerHTML = `
-            <button class="btn" onclick="showPage('addFundPage')" style="width:200px; background:linear-gradient(90deg, #ff6b6b, #ff4757);">
-                <i class="fas fa-plus-circle"></i> Add Funds Now
-            </button>
-        `;
-    } else {
-        document.getElementById('fundCheckMessage').style.display = 'none';
-        activatePackageRequest(amount, packageName);
-    }
-}
-
-function updateActivationDetails() {
-    const select = document.getElementById('activationPackageSelect');
-    const packages = {
-        '1000': {name: 'BRONZE'},
-        '3000': {name: 'PLATINUM'},
-        '5000': {name: 'SILVER'},
-        '10000': {name: 'GOLDEN'},
-        '20000': {name: 'DIAMOND'},
-        '30000': {name: 'DEFENDER'},
-        '50000': {name: 'CROWN'},
-        '70000': {name: 'LEGEND'},
-        '100000': {name: 'CONQUERER'},
-        '200000': {name: 'GOLD'},
-        '500000': {name: 'CRYSTAL'}
-    };
-    
-    const pkg = packages[select.value];
-    const detailsDiv = document.getElementById('activationDetails');
-    detailsDiv.innerHTML = `
-        <h4 style="color:#a970ff; margin-bottom:15px;">${pkg.name} Package Benefits:</h4>
-        <div class="pkg-features">
-            <li><i class="fas fa-check-circle"></i> Daily Task Income: ${platformData.settings.dailyTaskIncome}%</li>
-            <li><i class="fas fa-check-circle"></i> Referral Commission: ${platformData.settings.referralCommission}%</li>
-            <li><i class="fas fa-check-circle"></i> Daily 15 Clicks Task</li>
-            <li><i class="fas fa-check-circle"></i> Withdrawal in 24-48 hours</li>
-            <li><i class="fas fa-check-circle"></i> Validity: ${platformData.settings.packageValidity} Days</li>
-        </div>
-    `;
-    
-    // Check funds and update message
-    const amount = parseInt(select.value);
-    if (currentUser.balance < amount) {
-        document.getElementById('fundCheckMessage').style.display = 'block';
-        document.getElementById('activationButtonSection').innerHTML = `
-            <button class="btn" onclick="showPage('addFundPage')" style="width:200px; background:linear-gradient(90deg, #ff6b6b, #ff4757);">
-                <i class="fas fa-plus-circle"></i> Add Funds Now
-            </button>
-        `;
-    } else {
-        document.getElementById('fundCheckMessage').style.display = 'none';
-        document.getElementById('activationButtonSection').innerHTML = `
-            <button class="btn" onclick="activatePackageRequest(${amount}, '${pkg.name}')" style="width:200px;">
-                <i class="fas fa-bolt"></i> Activate Now
-            </button>
-        `;
-    }
-}
-
-// ================= PAYMENT FUNCTIONS =================
-function selectPaymentMethod(method) {
-    selectedPaymentMethod = method;
-    
-    document.querySelectorAll('.payment-method').forEach(el => {
-        el.classList.remove('selected');
-        el.querySelector('.fa-check-circle').style.display = 'none';
-    });
-    
-    event.currentTarget.classList.add('selected');
-    event.currentTarget.querySelector('.fa-check-circle').style.display = 'block';
-    
-    if (method === 'upi') {
-        const qrDisplay = document.getElementById('qrCodeDisplay');
-        const qrImage = document.getElementById('qrCodeImage');
-        if (platformData.settings.qrCode) {
-            qrImage.src = platformData.settings.qrCode;
-            qrDisplay.style.display = 'block';
-            document.getElementById('qrUpiId').innerText = platformData.settings.upiId;
-        } else {
-            qrDisplay.style.display = 'none';
-        }
-    }
-}
-
-function processPayment() {
+async function processPayment() {
     const amount = parseInt(document.getElementById('fundAmount').value);
     const upiTransactionId = document.getElementById('userUpiTransactionId').value.trim();
-    const userUpiId = document.getElementById('userUpiId')?.value.trim() || '';
     
-    if (!amount || amount < platformData.settings.minDeposit) {
-        showToast(`Minimum deposit is ₹${platformData.settings.minDeposit}`, 'error');
+    if (!amount || amount < 100) {
+        showToast('Minimum deposit is ₹100', 'error');
         return;
     }
     
     if (!upiTransactionId) {
-        showToast("Please enter your UPI transaction ID", 'error');
+        showToast('Please enter your UPI transaction ID', 'error');
         return;
     }
     
-    const requestId = 'DEP' + Math.floor(Math.random() * 1000000);
+    showLoading();
     
-    platformData.depositRequests.push({
-        requestId: requestId,
-        userId: currentUser.userId,
-        name: currentUser.name,
-        amount: amount,
-        method: 'UPI',
-        upiTransactionId: upiTransactionId,
-        userUpiId: userUpiId,
-        date: new Date().toLocaleString(),
-        status: "Pending",
-        notes: ""
-    });
-    
-    savePlatformData();
-    
-    // Clear form
-    document.getElementById('fundAmount').value = '';
-    document.getElementById('userUpiTransactionId').value = '';
-    document.getElementById('userUpiId').value = '';
-    
-    showToast(`Deposit request submitted! Request ID: ${requestId}. Amount will be added after admin approval.`, 'success');
-    updateNotificationCount();
+    try {
+        // Create deposit request
+        const depositData = {
+            userId: currentUser.id,
+            userName: currentUser.name,
+            userEmail: currentUser.email,
+            amount: amount,
+            upiTransactionId: upiTransactionId,
+            userUpiId: document.getElementById('userUpiId')?.value.trim() || '',
+            status: 'pending',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        
+        const requestId = await addRequest('depositRequests', depositData);
+        
+        if (requestId) {
+            hideLoading();
+            showToast(`Deposit request submitted! Request ID: ${requestId}. Amount will be added after admin approval.`, 'success');
+            
+            // Clear form
+            document.getElementById('fundAmount').value = '';
+            document.getElementById('userUpiTransactionId').value = '';
+            document.getElementById('userUpiId').value = '';
+            
+            // Update notification count
+            updateNotificationCount();
+        } else {
+            throw new Error('Failed to create deposit request');
+        }
+        
+    } catch (error) {
+        hideLoading();
+        showToast(error.message, 'error');
+    }
 }
 
-// ================= WITHDRAWAL FUNCTIONS =================
-function showWithdrawalDetails() {
-    const method = document.getElementById('withdrawMethod').value;
-    document.getElementById('bankDetailsSection').style.display = method === 'bank' ? 'block' : 'none';
-    document.getElementById('upiDetailsSection').style.display = method === 'upi' ? 'block' : 'none';
-    document.getElementById('paytmDetailsSection').style.display = method === 'paytm' ? 'block' : 'none';
-}
-
-function processWithdrawal() {
+async function processWithdrawal() {
     const amount = parseInt(document.getElementById('withdrawAmount').value);
     const method = document.getElementById('withdrawMethod').value;
     
-    if (!amount || amount < platformData.settings.minWithdrawal) {
-        showToast(`Minimum withdrawal is ₹${platformData.settings.minWithdrawal}`, 'error');
+    if (!amount || amount < 200) {
+        showToast('Minimum withdrawal is ₹200', 'error');
         return;
     }
     
     if (amount > currentUser.balance) {
-        showToast("Insufficient balance!", 'error');
+        showToast('Insufficient balance!', 'error');
         return;
     }
     
-    if (currentUser.kyc !== "Approved") {
-        showToast("KYC must be approved before withdrawal!", 'error');
+    if (currentUser.kyc !== 'approved') {
+        showToast('KYC must be approved before withdrawal!', 'error');
         showPage('kycPage');
         return;
     }
     
-    const fee = (amount * platformData.settings.withdrawalFee) / 100;
+    const fee = (amount * 5) / 100; // 5% fee
     const netAmount = amount - fee;
     
-    const requestId = 'WDR' + Math.floor(Math.random() * 1000000);
-    
-    currentUser.balance -= amount;
-    
     let accountDetails = '';
+    
     if (method === 'bank') {
         const bankName = document.getElementById('bankName').value;
         const accountNumber = document.getElementById('accountNumber').value;
@@ -5345,7 +4787,6 @@ function processWithdrawal() {
         
         if (!bankName || !accountNumber || !ifscCode || !accountHolder) {
             showToast('Please fill all bank details', 'error');
-            currentUser.balance += amount;
             return;
         }
         
@@ -5354,91 +4795,59 @@ function processWithdrawal() {
         const upiId = document.getElementById('upiIdInput').value;
         if (!upiId) {
             showToast('Please enter UPI ID', 'error');
-            currentUser.balance += amount;
             return;
         }
         accountDetails = `UPI ID: ${upiId}`;
-    } else if (method === 'paytm') {
-        const paytmNumber = document.getElementById('paytmNumber').value;
-        if (!paytmNumber) {
-            showToast('Please enter Paytm number', 'error');
-            currentUser.balance += amount;
-            return;
-        }
-        accountDetails = `Paytm: ${paytmNumber}`;
     }
     
-    currentUser.withdrawalHistory.push({
-        date: new Date().toLocaleString(),
-        reqId: requestId,
-        amount: amount,
-        method: method,
-        status: 'Pending',
-        processed: '-',
-        transId: '-',
-        fee: fee,
-        netAmount: netAmount
-    });
+    showLoading();
     
-    platformData.withdrawalRequests.push({
-        requestId: requestId,
-        userId: currentUser.userId,
-        name: currentUser.name,
-        amount: amount,
-        method: method,
-        accountDetails: accountDetails,
-        date: new Date().toLocaleString(),
-        status: "Pending",
-        fee: fee,
-        netAmount: netAmount
-    });
-    
-    platformData.transactions.push({
-        id: requestId,
-        userId: currentUser.userId,
-        type: 'Withdrawal',
-        amount: amount,
-        date: new Date().toLocaleString(),
-        status: 'Pending',
-        description: `Withdrawal request, Fee: ₹${fee}`
-    });
-    
-    savePlatformData();
-    
-    // Clear form
-    document.getElementById('withdrawAmount').value = '';
-    if (method === 'bank') {
-        document.getElementById('bankName').value = '';
-        document.getElementById('accountNumber').value = '';
-        document.getElementById('ifscCode').value = '';
-        document.getElementById('accountHolder').value = '';
-    } else if (method === 'upi') {
-        document.getElementById('upiIdInput').value = '';
-    } else if (method === 'paytm') {
-        document.getElementById('paytmNumber').value = '';
-    }
-    
-    showToast(`Withdrawal request submitted. ₹${amount} will be processed within 24-48 hours. Fee: ₹${fee}`, 'success');
-    showPage('dashboardPage');
-    updateDashboard();
-    updateNotificationCount();
-}
-
-// ================= KYC FUNCTIONS =================
-function handleKYCFile(input, textId) {
-    const file = input.files[0];
-    if (file) {
-        if (file.size > 2 * 1024 * 1024) {
-            showToast('File size should be less than 2MB', 'error');
-            input.value = '';
-            return;
+    try {
+        // Deduct amount from user's balance
+        await updateUserBalance(currentUser.id, amount, 'subtract');
+        
+        // Create withdrawal request
+        const withdrawalData = {
+            userId: currentUser.id,
+            userName: currentUser.name,
+            userEmail: currentUser.email,
+            amount: amount,
+            fee: fee,
+            netAmount: netAmount,
+            method: method,
+            accountDetails: accountDetails,
+            status: 'pending',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        
+        const requestId = await addRequest('withdrawalRequests', withdrawalData);
+        
+        if (requestId) {
+            // Add to user's withdrawal history
+            await db.collection('users').doc(currentUser.id)
+                .collection('withdrawals').doc(requestId).set(withdrawalData);
+            
+            hideLoading();
+            showToast(`Withdrawal request submitted. ₹${amount} will be processed within 24-48 hours. Fee: ₹${fee}`, 'success');
+            
+            // Clear form
+            document.getElementById('withdrawAmount').value = '';
+            
+            // Update dashboard
+            updateDashboard();
+            updateNotificationCount();
+            
+        } else {
+            throw new Error('Failed to create withdrawal request');
         }
-        document.getElementById(textId).innerHTML = `<i class="fas fa-check-circle" style="color:#1db954"></i> ${file.name}`;
-        showToast(`File "${file.name}" uploaded successfully`, 'success');
+        
+    } catch (error) {
+        hideLoading();
+        showToast(error.message, 'error');
     }
 }
 
-function submitKYC() {
+async function submitKYC() {
     const name = document.getElementById('kycName').value.trim();
     const dob = document.getElementById('kycDob').value;
     const aadhar = document.getElementById('kycAadhar').value.trim();
@@ -5451,7 +4860,7 @@ function submitKYC() {
         return;
     }
     
-    if (aadhar.length !== 12 || !/^\d+$/.test(aadhar)) {
+    if (aadhar.length !== 12) {
         showToast('Please enter valid 12-digit Aadhar number', 'error');
         return;
     }
@@ -5461,264 +4870,414 @@ function submitKYC() {
         return;
     }
     
-    platformData.kycRequests.push({
-        userId: currentUser.userId,
-        name: name,
-        dob: dob,
-        aadharNumber: aadhar,
-        panNumber: pan,
-        bankAccount: bankAccount,
-        ifscCode: ifscCode,
-        submittedDate: new Date().toLocaleString(),
-        status: "Pending"
-    });
-    
-    currentUser.kyc = "Under Review";
-    currentUser.kycSubmitted = true;
-    currentUser.bankDetails.accountNumber = bankAccount;
-    currentUser.bankDetails.ifscCode = ifscCode;
-    
-    savePlatformData();
-    
-    showToast("KYC submitted successfully! It will be reviewed within 24-48 hours.", 'success');
-    showPage('profilePage');
-    updateDashboard();
-    updateNotificationCount();
-}
-
-// ================= PASSWORD FUNCTIONS =================
-function changePassword() {
-    const currentPass = document.getElementById('currentPassword').value;
-    const newPass = document.getElementById('newPassword').value;
-    const confirmPass = document.getElementById('confirmPassword').value;
-    
-    if (!currentPass || !newPass || !confirmPass) {
-        showToast('Please fill all fields', 'error');
-        return;
-    }
-    
-    if (currentPass !== currentUser.password) {
-        showToast('Current password is incorrect', 'error');
-        return;
-    }
-    
-    if (newPass !== confirmPass) {
-        showToast('New passwords do not match!', 'error');
-        return;
-    }
-    
-    if (newPass.length < 6) {
-        showToast('Password must be at least 6 characters long!', 'error');
-        return;
-    }
-    
     showLoading();
     
-    setTimeout(() => {
-        currentUser.password = newPass;
+    try {
+        const kycData = {
+            userId: currentUser.id,
+            userName: currentUser.name,
+            userEmail: currentUser.email,
+            fullName: name,
+            dob: dob,
+            aadharNumber: aadhar,
+            panNumber: pan,
+            bankAccount: bankAccount,
+            ifscCode: ifscCode,
+            status: 'pending',
+            submittedDate: new Date().toISOString(),
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
         
-        platformData.users[currentUser.userId] = currentUser;
-        savePlatformData();
+        // Upload documents if selected
+        const files = {
+            aadharFront: document.getElementById('aadharFront').files[0],
+            aadharBack: document.getElementById('aadharBack').files[0],
+            panCard: document.getElementById('panCard').files[0]
+        };
         
-        document.getElementById('currentPassword').value = '';
-        document.getElementById('newPassword').value = '';
-        document.getElementById('confirmPassword').value = '';
+        for (const [type, file] of Object.entries(files)) {
+            if (file) {
+                const path = `kyc/${currentUser.id}/${type}_${Date.now()}_${file.name}`;
+                const url = await uploadFile(file, path);
+                if (url) {
+                    kycData[`${type}Url`] = url;
+                }
+            }
+        }
+        
+        // Save KYC request
+        await addRequest('kycRequests', kycData);
+        
+        // Update user KYC status
+        await db.collection('users').doc(currentUser.id).update({
+            kyc: 'pending_review'
+        });
+        
+        // Update current user object
+        currentUser.kyc = 'pending_review';
         
         hideLoading();
-        showToast('Password changed successfully!', 'success');
+        showToast('KYC submitted successfully! It will be reviewed within 24-48 hours.', 'success');
         showPage('profilePage');
-    }, 1000);
+        updateDashboard();
+        
+    } catch (error) {
+        hideLoading();
+        showToast(error.message, 'error');
+    }
 }
 
-function resetPassword() {
-    const email = document.getElementById('forgotEmail').value.trim();
+async function handleTaskClick() {
+    if (!currentUser) return;
     
-    if (!email) {
-        showToast('Please enter your email address', 'error');
+    // Check if user has active package
+    if (currentUser.package === 'none' || currentUser.fund <= 0) {
+        showToast('Please activate a package first to start tasks', 'error');
+        showPage('activationPage');
         return;
     }
     
-    showLoading();
-    
-    setTimeout(() => {
-        hideLoading();
-        showToast('Password reset link has been sent to your email', 'success');
-        showLogin();
-    }, 1500);
-}
-
-// ================= TABLE UPDATE FUNCTIONS =================
-function updateAllTables() {
-    updateActivationHistoryTable();
-    updateFundReportTable();
-    updateIncomeTables();
-    updateWithdrawalTables();
-}
-
-function updateActivationHistoryTable() {
-    let html = '';
-    let totalActivations = 0;
-    let totalInvestment = 0;
-    let activePackages = 0;
-    
-    currentUser.activationHistory.forEach(hist => {
-        totalActivations++;
-        totalInvestment += hist.amount;
-        
-        const isActive = hist.status === 'Active' && new Date(hist.validityTill) > new Date();
-        if (isActive) activePackages++;
-        
-        html += `
-            <tr>
-                <td>${hist.date}</td>
-                <td>${hist.package}</td>
-                <td>₹${hist.amount.toLocaleString()}</td>
-                <td><span style="color:${isActive ? '#1db954' : '#ff4757'}">${isActive ? 'Active' : 'Expired'}</span></td>
-                <td>${hist.validityTill}</td>
-                <td>₹${hist.dailyIncome ? hist.dailyIncome.toFixed(2) : '0.00'}</td>
-            </tr>
-        `;
-    });
-    
-    if (totalActivations === 0) {
-        html = `<tr><td colspan="6" style="text-align:center; padding:30px;">No activation history found</td></tr>`;
+    if (taskCompleted) {
+        showToast("You have already completed today's tasks!", 'info');
+        return;
     }
     
-    document.getElementById('activationHistoryTable').innerHTML = html;
-    document.getElementById('totalActivations').innerText = totalActivations;
-    document.getElementById('totalInvestment').innerText = `₹${totalInvestment.toLocaleString()}`;
-    document.getElementById('activePackages').innerText = activePackages;
-}
-
-function updateFundReportTable() {
-    let html = '';
-    let totalDeposits = 0;
-    let totalWithdrawals = 0;
+    const clickButton = document.getElementById('task-click-button');
+    clickButton.disabled = true;
+    clickButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
     
-    currentUser.fundHistory.forEach(trans => {
-        if (trans.type === 'Deposit' || trans.type === 'Registration Bonus') totalDeposits += trans.amount;
-        if (trans.type === 'Withdrawal') totalWithdrawals += trans.amount;
+    try {
+        // Get today's date
+        const today = new Date().toDateString();
         
-        html += `
-            <tr>
-                <td>${trans.date}</td>
-                <td>${trans.transId || 'N/A'}</td>
-                <td><span style="color:${trans.type.includes('Deposit') || trans.type.includes('Bonus') ? '#1db954' : '#ff4757'}">${trans.type}</span></td>
-                <td>₹${trans.amount.toLocaleString()}</td>
-                <td><span style="color:#1db954">${trans.status}</span></td>
-                <td>₹${trans.balance.toLocaleString()}</td>
-            </tr>
-        `;
-    });
-    
-    if (currentUser.fundHistory.length === 0) {
-        html = `<tr><td colspan="6" style="text-align:center; padding:30px;">No transaction history found</td></tr>`;
-    }
-    
-    document.getElementById('fundReportTable').innerHTML = html;
-    document.getElementById('totalDeposits').innerText = `₹${totalDeposits.toLocaleString()}`;
-    document.getElementById('totalWithdrawals').innerText = `₹${totalWithdrawals.toLocaleString()}`;
-    document.getElementById('netBalance').innerText = `₹${(totalDeposits - totalWithdrawals + currentUser.balance).toLocaleString()}`;
-}
-
-function updateIncomeTables() {
-    // Level Income Table
-    const levels = [
-        {level: 1, members: currentUser.referrals || 0, commission: `${platformData.settings.referralCommission}%`, total: currentUser.referralIncome || 0, today: 0, status: 'Active'}
-    ];
-    
-    let levelHtml = '';
-    let totalLevelIncome = 0;
-    let todayLevelIncome = 0;
-    let activeLevels = 0;
-    
-    levels.forEach(lvl => {
-        totalLevelIncome += lvl.total;
-        todayLevelIncome += lvl.today;
-        if (lvl.members > 0) activeLevels++;
+        // Check if user already completed tasks today
+        const tasksSnapshot = await db.collection('users').doc(currentUser.id)
+            .collection('dailyTasks').where('date', '==', today).get();
         
-        levelHtml += `
-            <tr>
-                <td>Level ${lvl.level}</td>
-                <td>${lvl.members}</td>
-                <td>${lvl.commission}</td>
-                <td>₹${lvl.total.toLocaleString()}</td>
-                <td>₹${lvl.today.toLocaleString()}</td>
-                <td><span style="color:#1db954">${lvl.status}</span></td>
-            </tr>
-        `;
-    });
-    
-    document.getElementById('levelIncomeTable').innerHTML = levelHtml;
-    document.getElementById('totalLevelIncome').innerText = `₹${totalLevelIncome.toLocaleString()}`;
-    document.getElementById('todayLevelIncome').innerText = `₹${todayLevelIncome.toLocaleString()}`;
-    document.getElementById('activeLevels').innerText = activeLevels;
-    
-    // ROI Income Table (Task Income)
-    let taskHtml = '';
-    let totalTaskIncome = 0;
-    let todayTaskIncome = 0;
-    
-    if (currentUser.taskIncome && currentUser.taskIncome.length > 0) {
-        const today = new Date().toLocaleDateString();
-        currentUser.taskIncome.forEach(task => {
-            totalTaskIncome += task.amount || 0;
-            if (task.date.includes(today)) todayTaskIncome += task.amount || 0;
+        let todayTask = null;
+        if (!tasksSnapshot.empty) {
+            todayTask = tasksSnapshot.docs[0].data();
+            taskClickCount = todayTask.clicksCompleted || 0;
             
-            taskHtml += `
+            if (taskClickCount >= taskTotalClicksNeeded) {
+                taskCompleted = true;
+                showToast("You have already completed today's tasks!", 'info');
+                return;
+            }
+        }
+        
+        // Calculate reward (5% of fund divided by 15 clicks)
+        const dailyReward = currentUser.fund * 0.05; // 5%
+        const perClickReward = dailyReward / taskTotalClicksNeeded;
+        
+        // Increment click count
+        taskClickCount++;
+        
+        if (todayTask) {
+            // Update existing task
+            await db.collection('users').doc(currentUser.id)
+                .collection('dailyTasks').doc(tasksSnapshot.docs[0].id).update({
+                    clicksCompleted: taskClickCount,
+                    todayIncome: firebase.firestore.FieldValue.increment(perClickReward),
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+        } else {
+            // Create new task for today
+            await db.collection('users').doc(currentUser.id)
+                .collection('dailyTasks').add({
+                    date: today,
+                    clicksCompleted: taskClickCount,
+                    todayIncome: perClickReward,
+                    package: currentUser.package,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+        }
+        
+        // Update user balance
+        await updateUserBalance(currentUser.id, perClickReward, 'add');
+        
+        // Update user statistics
+        await db.collection('users').doc(currentUser.id).update({
+            totalIncome: firebase.firestore.FieldValue.increment(perClickReward),
+            todayIncome: firebase.firestore.FieldValue.increment(perClickReward),
+            totalTasks: firebase.firestore.FieldValue.increment(1)
+        });
+        
+        // Add task income transaction
+        await addTransaction({
+            userId: currentUser.id,
+            type: 'task_income',
+            amount: perClickReward,
+            status: 'success',
+            description: `Daily click task #${taskClickCount} from ${currentUser.package} package`
+        });
+        
+        // Check if task is completed
+        if (taskClickCount >= taskTotalClicksNeeded) {
+            taskCompleted = true;
+            showToast(`Congratulations! Daily tasks completed. ₹${dailyReward.toFixed(2)} added to your balance.`, 'success');
+        } else {
+            showToast(`Click completed! ₹${perClickReward.toFixed(2)} added to your balance. ${taskTotalClicksNeeded - taskClickCount} clicks remaining.`, 'success');
+        }
+        
+        // Refresh user data
+        const userDoc = await db.collection('users').doc(currentUser.id).get();
+        currentUser = { id: userDoc.id, ...userDoc.data() };
+        
+        // Update UI
+        updateTaskUI();
+        updateTaskRewards();
+        updateDashboard();
+        
+        // Re-enable button if task not completed
+        if (!taskCompleted) {
+            clickButton.disabled = false;
+            clickButton.textContent = "Click Here";
+        }
+        
+    } catch (error) {
+        console.error("Task error:", error);
+        showToast('Error processing task. Please try again.', 'error');
+        clickButton.disabled = false;
+        clickButton.textContent = "Click Here";
+    }
+}
+
+// ================= ADMIN FUNCTIONS =================
+async function updateAdminDashboard() {
+    if (!currentAdmin) return;
+    
+    try {
+        // Get counts from Firestore
+        const [
+            usersSnapshot,
+            depositRequestsSnapshot,
+            withdrawalRequestsSnapshot,
+            kycRequestsSnapshot,
+            packagesSnapshot
+        ] = await Promise.all([
+            db.collection('users').get(),
+            db.collection('depositRequests').where('status', '==', 'pending').get(),
+            db.collection('withdrawalRequests').where('status', '==', 'pending').get(),
+            db.collection('kycRequests').where('status', '==', 'pending').get(),
+            db.collection('users').where('package', '!=', 'none').get()
+        ]);
+        
+        // Calculate totals
+        let totalUsers = 0;
+        let activeUsers = 0;
+        let totalDeposits = 0;
+        let totalWithdrawals = 0;
+        let totalInvestments = 0;
+        
+        usersSnapshot.forEach(doc => {
+            totalUsers++;
+            const user = doc.data();
+            if (user.status === 'active') activeUsers++;
+            if (user.balance) totalDeposits += user.balance;
+            if (user.fund) totalInvestments += user.fund;
+        });
+        
+        // Update UI
+        document.getElementById('adminTotalUsers').innerText = totalUsers;
+        document.getElementById('adminActiveUsers').innerText = activeUsers;
+        document.getElementById('adminTotalDeposits').innerText = `₹${totalDeposits}`;
+        document.getElementById('adminTotalWithdrawals').innerText = `₹${totalWithdrawals}`;
+        document.getElementById('adminTotalInvestments').innerText = `₹${totalInvestments}`;
+        document.getElementById('adminPendingRequests').innerText = 
+            depositRequestsSnapshot.size + withdrawalRequestsSnapshot.size + kycRequestsSnapshot.size;
+        document.getElementById('adminTotalCommission').innerText = `₹${totalInvestments * 0.1}`; // 10% commission
+        
+        // Update recent activity
+        updateRecentActivity();
+        
+    } catch (error) {
+        console.error("Error updating admin dashboard:", error);
+    }
+}
+
+async function updateRecentActivity() {
+    try {
+        const snapshot = await db.collection('transactions')
+            .orderBy('createdAt', 'desc')
+            .limit(10)
+            .get();
+        
+        let html = '';
+        snapshot.forEach(doc => {
+            const trans = doc.data();
+            html += `
                 <tr>
-                    <td>${task.date}</td>
-                    <td>${task.package}</td>
-                    <td>₹${task.fund.toLocaleString()}</td>
-                    <td>${platformData.settings.dailyTaskIncome}%</td>
-                    <td>₹${(task.fund * platformData.settings.dailyTaskIncome / 100 / 15).toFixed(2)}</td>
-                    <td>₹${task.amount.toFixed(2)}</td>
-                    <td><span style="color:#1db954">Completed</span></td>
+                    <td>${new Date(trans.createdAt?.toDate()).toLocaleTimeString()}</td>
+                    <td>${trans.userId || 'SYSTEM'}</td>
+                    <td>${trans.type}</td>
+                    <td>₹${trans.amount}</td>
+                    <td><span class="status-badge ${trans.status}">${trans.status}</span></td>
                 </tr>
             `;
         });
-    } else {
-        taskHtml = `<tr><td colspan="7" style="text-align:center; padding:30px;">No task income found</td></tr>`;
+        
+        document.getElementById('adminRecentActivity').innerHTML = html;
+    } catch (error) {
+        console.error("Error getting recent activity:", error);
     }
-    
-    document.getElementById('roiIncomeTable').innerHTML = taskHtml;
-    document.getElementById('totalROI').innerText = `₹${totalTaskIncome.toLocaleString()}`;
-    document.getElementById('todayROI').innerText = `₹${todayTaskIncome.toLocaleString()}`;
-    document.getElementById('activeInvestments').innerText = currentUser.package !== "None" ? 1 : 0;
 }
 
-function updateWithdrawalTables() {
-    let html = '';
-    let withdrawalRequests = 0;
-    let withdrawalApproved = 0;
-    let withdrawalPending = 0;
-    
-    currentUser.withdrawalHistory.forEach(wd => {
-        withdrawalRequests++;
-        if (wd.status === 'Approved') withdrawalApproved += wd.amount;
-        if (wd.status === 'Pending') withdrawalPending += wd.amount;
+async function loadUsersTable() {
+    try {
+        const snapshot = await db.collection('users').get();
+        let html = '';
         
-        html += `
-            <tr>
-                <td>${wd.date}</td>
-                <td>${wd.reqId}</td>
-                <td>₹${wd.amount.toLocaleString()}</td>
-                <td>${wd.method}</td>
-                <td><span style="color:${wd.status === 'Approved' ? '#1db954' : wd.status === 'Pending' ? '#ffc107' : '#ff4757'}">${wd.status}</span></td>
-                <td>${wd.processed}</td>
-                <td>${wd.transId}</td>
-            </tr>
-        `;
-    });
-    
-    if (withdrawalRequests === 0) {
-        html = `<tr><td colspan="7" style="text-align:center; padding:30px;">No withdrawal history found</td></tr>`;
+        snapshot.forEach(doc => {
+            const user = doc.data();
+            html += `
+                <tr>
+                    <td>${user.userId}</td>
+                    <td>${user.name}</td>
+                    <td>${user.mobile}</td>
+                    <td>₹${user.balance}</td>
+                    <td>${user.package}</td>
+                    <td><span class="status-badge ${user.status}">${user.status}</span></td>
+                    <td><span class="status-badge ${user.kyc}">${user.kyc}</span></td>
+                    <td>${user.joinDate}</td>
+                    <td>
+                        <button class="btn btn-sm" onclick="viewUserDetails('${doc.id}')">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button class="btn btn-sm ${user.status === 'active' ? 'btn-danger' : 'btn-success'}" 
+                                onclick="toggleUserStatus('${doc.id}', '${user.status}')">
+                            <i class="fas fa-${user.status === 'active' ? 'ban' : 'check'}"></i>
+                        </button>
+                        <button class="btn btn-sm btn-success" onclick="addFundToUser('${doc.id}')">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+        
+        document.getElementById('adminUsersTable').innerHTML = html;
+    } catch (error) {
+        console.error("Error loading users:", error);
     }
-    
-    document.getElementById('withdrawalReportTable').innerHTML = html;
-    document.getElementById('withdrawalRequests').innerText = withdrawalRequests;
-    document.getElementById('withdrawalApproved').innerText = `₹${withdrawalApproved.toLocaleString()}`;
-    document.getElementById('withdrawalPending').innerText = `₹${withdrawalPending.toLocaleString()}`;
+}
+
+async function approveDeposit(requestId) {
+    try {
+        const requestDoc = await db.collection('depositRequests').doc(requestId).get();
+        if (!requestDoc.exists) return;
+        
+        const request = requestDoc.data();
+        
+        if (!confirm(`Approve deposit of ₹${request.amount} from ${request.userName}?`)) {
+            return;
+        }
+        
+        // Update request status
+        await updateRequestStatus('depositRequests', requestId, 'approved', currentAdmin.id);
+        
+        // Update user balance
+        await updateUserBalance(request.userId, request.amount, 'add');
+        
+        // Add transaction
+        await addTransaction({
+            userId: request.userId,
+            type: 'deposit_approved',
+            amount: request.amount,
+            status: 'success',
+            description: `Deposit approved by admin`
+        });
+        
+        showToast(`Deposit approved for ${request.userName}`, 'success');
+        
+        // Refresh tables
+        loadDepositsTable();
+        updateAdminDashboard();
+        
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}
+
+async function approveWithdrawal(requestId) {
+    try {
+        const requestDoc = await db.collection('withdrawalRequests').doc(requestId).get();
+        if (!requestDoc.exists) return;
+        
+        const request = requestDoc.data();
+        
+        if (!confirm(`Approve withdrawal of ₹${request.amount} to ${request.userName}?`)) {
+            return;
+        }
+        
+        // Update request status
+        await updateRequestStatus('withdrawalRequests', requestId, 'approved', currentAdmin.id);
+        
+        // Add transaction
+        await addTransaction({
+            userId: request.userId,
+            type: 'withdrawal_approved',
+            amount: request.amount,
+            status: 'success',
+            description: `Withdrawal approved by admin`
+        });
+        
+        showToast(`Withdrawal approved for ${request.userName}`, 'success');
+        
+        // Refresh tables
+        loadWithdrawalsTable();
+        updateAdminDashboard();
+        
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}
+
+async function verifyKYC(userId) {
+    try {
+        // Get KYC request
+        const kycSnapshot = await db.collection('kycRequests')
+            .where('userId', '==', userId)
+            .where('status', '==', 'pending')
+            .get();
+        
+        if (kycSnapshot.empty) return;
+        
+        const kycId = kycSnapshot.docs[0].id;
+        
+        if (!confirm(`Verify KYC for user ${userId}?`)) {
+            return;
+        }
+        
+        // Update KYC request status
+        await updateRequestStatus('kycRequests', kycId, 'approved', currentAdmin.id);
+        
+        // Update user KYC status
+        await db.collection('users').doc(userId).update({
+            kyc: 'approved'
+        });
+        
+        // Give KYC bonus
+        await updateUserBalance(userId, 50, 'add');
+        
+        // Add transaction
+        await addTransaction({
+            userId: userId,
+            type: 'kyc_bonus',
+            amount: 50,
+            status: 'success',
+            description: 'KYC verification bonus'
+        });
+        
+        showToast(`KYC verified for user ${userId}. ₹50 bonus added.`, 'success');
+        
+        // Refresh tables
+        loadKYCTable();
+        updateAdminDashboard();
+        
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
 }
 
 // ================= UTILITY FUNCTIONS =================
@@ -5744,986 +5303,16 @@ function hideLoading() {
     document.getElementById('loading').style.display = 'none';
 }
 
-function updateNotificationCount() {
-    let count = 0;
-    
-    if (currentAdmin) {
-        count += platformData.depositRequests.filter(req => req.status === "Pending").length;
-        count += platformData.withdrawalRequests.filter(req => req.status === "Pending").length;
-        count += platformData.packageRequests.filter(req => req.status === "Pending").length;
-        count += platformData.kycRequests.filter(req => req.status === "Pending").length;
-    } else if (currentUser) {
-        count += currentUser.withdrawalHistory.filter(w => w.status === "Pending").length;
-    }
-    
-    document.getElementById('notificationCount').innerText = count;
-}
-
-function showNotification() {
-    if (currentAdmin) {
-        showAdminPage('adminDashboardPage');
-        showToast(`You have ${document.getElementById('notificationCount').innerText} pending requests`, 'info');
-    } else if (currentUser) {
-        showToast('You have no new notifications', 'info');
-    }
-}
-
-function copyReferralLink() {
-    const refLink = document.getElementById('refLink');
-    refLink.select();
-    refLink.setSelectionRange(0, 99999);
-    document.execCommand("copy");
-    
-    if (navigator.clipboard) {
-        navigator.clipboard.writeText(refLink.value);
-    }
-    
-    showToast('Referral link copied to clipboard!', 'success');
-}
-
-function shareOnTelegram() {
-    const text = "Join CapitalRise Trading Platform and start earning! Use my referral link: " + document.getElementById('refLink').value;
-    window.open(`https://t.me/share/url?url=${encodeURIComponent(document.getElementById('refLink').value)}&text=${encodeURIComponent(text)}`, '_blank');
-}
-
-function shareOnWhatsApp() {
-    const text = "Join CapitalRise Trading Platform and start earning! Use my referral link: " + document.getElementById('refLink').value;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
-}
-
-function shareOnFacebook() {
-    const url = encodeURIComponent(document.getElementById('refLink').value);
-    window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`, '_blank');
-}
-
-// ================= SETUP EVENT LISTENERS =================
-function setupEventListeners() {
-    document.getElementById('withdrawMethod')?.addEventListener('change', showWithdrawalDetails);
-}
-
-// ================= ADMIN FUNCTIONS =================
-function updateAdminDashboard() {
-    const users = platformData.users;
-    let totalUsers = 0;
-    let activeUsers = 0;
-    let totalDeposits = 0;
-    let totalWithdrawals = 0;
-    let totalInvestments = 0;
-    let pendingRequests = 0;
-    let totalCommission = 0;
-    let todayUsers = 0;
-    let activeToday = 0;
-    let todayDeposits = 0;
-    let pendingWithdrawals = 0;
-    let todayWithdrawals = 0;
-    
-    const today = new Date().toLocaleDateString();
-    
-    for (const userId in users) {
-        totalUsers++;
-        if (users[userId].status === "Active") activeUsers++;
-        if (users[userId].joinDate === today) todayUsers++;
-        totalInvestments += users[userId].fund || 0;
-        totalCommission += users[userId].referralIncome || 0;
-        
-        // Check if user was active today
-        if (users[userId].lastLogin && users[userId].lastLogin.includes(today)) {
-            activeToday++;
-        }
-    }
-    
-    platformData.depositRequests.forEach(req => {
-        if (req.status === "Approved") totalDeposits += req.amount;
-        if (req.date.includes(today) && req.status === "Approved") todayDeposits += req.amount;
-    });
-    
-    platformData.withdrawalRequests.forEach(req => {
-        if (req.status === "Approved") totalWithdrawals += req.amount;
-        if (req.status === "Pending") pendingWithdrawals += req.amount;
-        if (req.date.includes(today) && req.status === "Approved") todayWithdrawals += req.amount;
-    });
-    
-    pendingRequests = platformData.depositRequests.filter(req => req.status === "Pending").length +
-                     platformData.withdrawalRequests.filter(req => req.status === "Pending").length +
-                     platformData.kycRequests.filter(req => req.status === "Pending").length;
-    
-    document.getElementById('adminTotalUsers').innerText = totalUsers;
-    document.getElementById('adminActiveUsers').innerText = activeUsers;
-    document.getElementById('adminTotalDeposits').innerText = `₹${totalDeposits}`;
-    document.getElementById('adminTotalWithdrawals').innerText = `₹${totalWithdrawals}`;
-    document.getElementById('adminTotalInvestments').innerText = `₹${totalInvestments}`;
-    document.getElementById('adminPendingRequests').innerText = pendingRequests;
-    document.getElementById('adminTotalCommission').innerText = `₹${totalCommission}`;
-    document.getElementById('adminPlatformBalance').innerText = `₹${platformData.platformBalance}`;
-    document.getElementById('adminTodayUsers').innerText = todayUsers;
-    document.getElementById('adminActiveToday').innerText = activeToday;
-    document.getElementById('adminTodayDeposits').innerText = `₹${todayDeposits}`;
-    document.getElementById('adminPendingWithdrawals').innerText = `₹${pendingWithdrawals}`;
-    
-    updateRecentActivity();
-}
-
-function updateRecentActivity() {
-    const recentTransactions = [...platformData.transactions]
-        .sort((a, b) => new Date(b.date) - new Date(a.date))
-        .slice(0, 10);
-    
-    let html = '';
-    recentTransactions.forEach(trans => {
-        html += `
-            <tr>
-                <td>${trans.date.split(' ')[1] || '00:00'}</td>
-                <td>${trans.userId}</td>
-                <td>${trans.type}</td>
-                <td>₹${trans.amount}</td>
-                <td><span class="status-badge ${trans.status.toLowerCase()}">${trans.status}</span></td>
-            </tr>
-        `;
-    });
-    
-    document.getElementById('adminRecentActivity').innerHTML = html;
-}
-
-function showAddUserModal() {
-    document.getElementById('addUserModal').style.display = "flex";
-}
-
-function closeAddUserModal() {
-    document.getElementById('addUserModal').style.display = "none";
-}
-
-function createNewUser() {
-    const name = document.getElementById('newUserName').value.trim();
-    const mobile = document.getElementById('newUserMobile').value.trim();
-    const email = document.getElementById('newUserEmail').value.trim();
-    const password = document.getElementById('newUserPassword').value;
-    const balance = parseInt(document.getElementById('newUserBalance').value) || 50;
-    const referralId = document.getElementById('newUserReferral').value.trim().toUpperCase();
-    
-    if (!name || !mobile || !email || !password) {
-        showToast('Please fill all required fields', 'error');
-        return;
-    }
-    
-    // Generate unique user ID
-    const userId = 'USER' + String(platformData.userCounter++).padStart(4, '0');
-    
-    showLoading();
-    
-    setTimeout(() => {
-        platformData.users[userId] = {
-            name: name,
-            userId: userId,
-            password: password,
-            joinDate: new Date().toLocaleDateString('en-US'),
-            balance: balance,
-            fund: 0,
-            email: email,
-            mobile: mobile,
-            status: "Active",
-            package: "None",
-            kyc: "Pending",
-            totalIncome: 0,
-            todayIncome: 0,
-            referralIncome: 0,
-            totalTasks: 0,
-            referrals: 0,
-            rank: "Beginner",
-            activationHistory: [],
-            fundHistory: [{
-                date: new Date().toLocaleString(),
-                type: 'Admin Added',
-                amount: balance,
-                method: 'System',
-                status: 'Success',
-                balance: balance
-            }],
-            levelIncome: [],
-            referralIncomeList: [],
-            rewardIncome: [],
-            taskIncome: [],
-            withdrawalHistory: [],
-            tasks: [],
-            kycSubmitted: false,
-            bankDetails: {
-                accountNumber: "",
-                ifscCode: "",
-                bankName: ""
-            },
-            dailyTasks: {
-                lastTaskDate: "",
-                clicksCompleted: 0,
-                todayIncome: 0
-            },
-            sponsorId: referralId || "CAPITAL01",
-            lastLogin: new Date().toLocaleString(),
-            createdByAdmin: true
-        };
-        
-        if (referralId && platformData.users[referralId]) {
-            platformData.users[userId].referredBy = referralId;
-            platformData.users[referralId].referrals = (platformData.users[referralId].referrals || 0) + 1;
-            
-            const commission = (balance * platformData.settings.referralCommission / 100);
-            platformData.users[referralId].balance += commission;
-            platformData.users[referralId].referralIncome += commission;
-            platformData.users[referralId].totalIncome += commission;
-            
-            platformData.transactions.push({
-                id: 'TRN' + Math.floor(Math.random() * 1000000),
-                userId: referralId,
-                type: 'Referral Commission',
-                amount: commission,
-                date: new Date().toLocaleString(),
-                status: 'Completed',
-                description: `Commission from ${userId} registration`
-            });
-        }
-        
-        savePlatformData();
-        
-        platformData.transactions.push({
-            id: 'TRN' + Math.floor(Math.random() * 1000000),
-            userId: userId,
-            type: 'User Created',
-            amount: balance,
-            date: new Date().toLocaleString(),
-            status: 'Completed',
-            description: `User created by admin with ₹${balance} bonus`
-        });
-        
-        savePlatformData();
-        
-        document.getElementById('newUserName').value = '';
-        document.getElementById('newUserMobile').value = '';
-        document.getElementById('newUserEmail').value = '';
-        document.getElementById('newUserPassword').value = '';
-        document.getElementById('newUserBalance').value = '50';
-        document.getElementById('newUserReferral').value = '';
-        
-        closeAddUserModal();
-        hideLoading();
-        showToast(`User ${userId} created successfully with ₹${balance} bonus!`, 'success');
-        loadUsersTable();
-        updateAdminDashboard();
-    }, 1000);
-}
-
-function loadUsersTable() {
-    const users = platformData.users;
-    let html = '';
-    for (const userId in users) {
-        const user = users[userId];
-        html += `
-            <tr>
-                <td>${userId}</td>
-                <td>${user.name}</td>
-                <td>${user.mobile}</td>
-                <td>₹${user.balance}</td>
-                <td>${user.package}</td>
-                <td><span class="status-badge ${user.status === 'Active' ? 'active' : 'inactive'}">${user.status}</span></td>
-                <td><span class="status-badge ${user.kyc === 'Approved' ? 'active' : user.kyc === 'Pending' ? 'pending' : 'inactive'}">${user.kyc}</span></td>
-                <td>${user.joinDate}</td>
-                <td>
-                    <button class="btn btn-sm" onclick="viewUserDetails('${userId}')" title="View Details">
-                        <i class="fas fa-eye"></i>
-                    </button>
-                    <button class="btn btn-sm ${user.status === 'Active' ? 'btn-danger' : 'btn-success'}" 
-                            onclick="toggleUserStatus('${userId}')" 
-                            title="${user.status === 'Active' ? 'Block User' : 'Activate User'}">
-                        <i class="fas fa-${user.status === 'Active' ? 'ban' : 'check'}"></i>
-                    </button>
-                    <button class="btn btn-sm btn-success" onclick="addFundToUser('${userId}')" title="Add Fund">
-                        <i class="fas fa-plus"></i>
-                    </button>
-                </td>
-            </tr>
-        `;
-    }
-    document.getElementById('adminUsersTable').innerHTML = html;
-}
-
-function searchUsers() {
-    const searchTerm = document.getElementById('searchUser').value.toLowerCase();
-    const rows = document.querySelectorAll('#adminUsersTable tr');
-    
-    rows.forEach(row => {
-        const text = row.textContent.toLowerCase();
-        row.style.display = text.includes(searchTerm) ? '' : 'none';
-    });
-}
-
-function viewUserDetails(userId) {
-    const user = platformData.users[userId];
-    if (!user) return;
-    
-    alert(`User Details:\n\nName: ${user.name}\nUser ID: ${userId}\nEmail: ${user.email}\nMobile: ${user.mobile}\nBalance: ₹${user.balance}\nPackage: ${user.package}\nKYC: ${user.kyc}\nStatus: ${user.status}\nLast Login: ${user.lastLogin || 'Never'}`);
-}
-
-function toggleUserStatus(userId) {
-    const user = platformData.users[userId];
-    if (!user) return;
-    
-    if (confirm(`Are you sure you want to ${user.status === 'Active' ? 'block' : 'activate'} user ${userId}?`)) {
-        user.status = user.status === 'Active' ? 'Blocked' : 'Active';
-        savePlatformData();
-        
-        platformData.transactions.push({
-            id: 'TRN' + Math.floor(Math.random() * 1000000),
-            userId: userId,
-            type: 'Status Change',
-            amount: 0,
-            date: new Date().toLocaleString(),
-            status: 'Completed',
-            description: `User ${user.status === 'Active' ? 'activated' : 'blocked'} by admin`
-        });
-        
-        savePlatformData();
-        
-        showToast(`User ${userId} has been ${user.status === 'Active' ? 'activated' : 'blocked'}`, 'success');
-        
-        loadUsersTable();
-        updateAdminDashboard();
-    }
-}
-
-function addFundToUser(userId) {
-    const amount = prompt(`Enter amount to add to user ${userId}:`, "100");
-    if (!amount || isNaN(amount) || amount <= 0) return;
-    
-    const parsedAmount = parseInt(amount);
-    const user = platformData.users[userId];
-    if (!user) return;
-    
-    user.balance += parsedAmount;
-    
-    user.fundHistory.push({
-        date: new Date().toLocaleString(),
-        type: 'Admin Added',
-        amount: parsedAmount,
-        method: 'System',
-        status: 'Success',
-        balance: user.balance
-    });
-    
-    savePlatformData();
-    
-    platformData.transactions.push({
-        id: 'TRN' + Math.floor(Math.random() * 1000000),
-        userId: userId,
-        type: 'Admin Fund Added',
-        amount: parsedAmount,
-        date: new Date().toLocaleString(),
-        status: 'Completed',
-        description: `Fund added by admin`
-    });
-    
-    savePlatformData();
-    
-    showToast(`₹${parsedAmount} added to user ${userId}`, 'success');
-    loadUsersTable();
-    updateAdminDashboard();
-}
-
-function loadDepositsTable() {
-    const pendingDeposits = platformData.depositRequests.filter(req => req.status === "Pending");
-    const approvedDeposits = platformData.depositRequests.filter(req => req.status === "Approved");
-    
-    document.getElementById('pendingDepositsCount').innerText = pendingDeposits.length;
-    document.getElementById('pendingDepositsAmount').innerText = `₹${pendingDeposits.reduce((sum, req) => sum + req.amount, 0)}`;
-    document.getElementById('todayDepositsCount').innerText = approvedDeposits.filter(req => 
-        req.date.includes(new Date().toLocaleDateString())
-    ).length;
-    
-    let html = '';
-    [...pendingDeposits, ...approvedDeposits].forEach(deposit => {
-        html += `
-            <tr>
-                <td>${deposit.requestId}</td>
-                <td>${deposit.userId}</td>
-                <td>${deposit.name}</td>
-                <td>₹${deposit.amount}</td>
-                <td>${deposit.upiTransactionId || 'N/A'}</td>
-                <td>${deposit.userUpiId || 'N/A'}</td>
-                <td>${deposit.date}</td>
-                <td><span class="status-badge ${deposit.status.toLowerCase()}">${deposit.status}</span></td>
-                <td>
-                    ${deposit.status === "Pending" ? `
-                        <button class="btn btn-sm btn-success" onclick="approveDeposit('${deposit.requestId}')">
-                            <i class="fas fa-check"></i> Approve
-                        </button>
-                        <button class="btn btn-sm btn-danger" onclick="rejectDeposit('${deposit.requestId}')">
-                            <i class="fas fa-times"></i> Reject
-                        </button>
-                    ` : 'Completed'}
-                </td>
-            </tr>
-        `;
-    });
-    
-    document.getElementById('adminDepositsTable').innerHTML = html;
-}
-
-function approveDeposit(requestId) {
-    const deposit = platformData.depositRequests.find(req => req.requestId === requestId);
-    if (!deposit) return;
-    
-    const user = platformData.users[deposit.userId];
-    if (!user) return;
-    
-    if (confirm(`Approve deposit of ₹${deposit.amount} from ${user.name}?\nUPI TXN ID: ${deposit.upiTransactionId}\nUser UPI: ${deposit.userUpiId || 'Not provided'}`)) {
-        deposit.status = "Approved";
-        deposit.approvedBy = currentAdmin.id;
-        deposit.approvedAt = new Date().toLocaleString();
-        
-        user.balance += deposit.amount;
-        
-        user.fundHistory.push({
-            date: new Date().toLocaleString(),
-            type: 'Deposit',
-            amount: deposit.amount,
-            method: 'UPI',
-            status: 'Success',
-            balance: user.balance,
-            transId: deposit.requestId,
-            upiTransactionId: deposit.upiTransactionId
-        });
-        
-        platformData.transactions.push({
-            id: deposit.requestId,
-            userId: deposit.userId,
-            type: 'Deposit',
-            amount: deposit.amount,
-            date: new Date().toLocaleString(),
-            status: 'Approved',
-            description: `Deposit via UPI, TXN ID: ${deposit.upiTransactionId}`
-        });
-        
-        platformData.platformBalance += deposit.amount;
-        
-        savePlatformData();
-        
-        showToast(`Deposit of ₹${deposit.amount} approved for ${user.name}`, 'success');
-        loadDepositsTable();
-        updateAdminDashboard();
-        updateNotificationCount();
-        
-        if (currentUser && currentUser.userId === deposit.userId) {
-            updateDashboard();
-        }
-    }
-}
-
-function rejectDeposit(requestId) {
-    const deposit = platformData.depositRequests.find(req => req.requestId === requestId);
-    if (!deposit) return;
-    
-    const user = platformData.users[deposit.userId];
-    if (!user) return;
-    
-    const reason = prompt("Enter reason for rejection:", "Incorrect payment details");
-    if (reason === null) return;
-    
-    deposit.status = "Rejected";
-    deposit.rejectionReason = reason;
-    deposit.rejectedBy = currentAdmin.id;
-    deposit.rejectedAt = new Date().toLocaleString();
-    
-    platformData.transactions.push({
-        id: deposit.requestId,
-        userId: deposit.userId,
-        type: 'Deposit',
-        amount: deposit.amount,
-        date: new Date().toLocaleString(),
-        status: 'Rejected',
-        description: `Deposit rejected: ${reason}`
-    });
-    
-    savePlatformData();
-    
-    showToast(`Deposit request rejected`, 'success');
-    loadDepositsTable();
-    updateAdminDashboard();
-    updateNotificationCount();
-}
-
-function loadWithdrawalsTable() {
-    const pendingWithdrawals = platformData.withdrawalRequests.filter(req => req.status === "Pending");
-    const processedWithdrawals = platformData.withdrawalRequests.filter(req => req.status !== "Pending");
-    
-    document.getElementById('pendingWithdrawalsCount').innerText = pendingWithdrawals.length;
-    document.getElementById('pendingWithdrawalsAmount').innerText = `₹${pendingWithdrawals.reduce((sum, req) => sum + req.amount, 0)}`;
-    document.getElementById('todayWithdrawalsCount').innerText = processedWithdrawals.filter(req => 
-        req.date.includes(new Date().toLocaleDateString())
-    ).length;
-    
-    let html = '';
-    [...pendingWithdrawals, ...processedWithdrawals].forEach(withdrawal => {
-        html += `
-            <tr>
-                <td>${withdrawal.requestId}</td>
-                <td>${withdrawal.userId}</td>
-                <td>${withdrawal.name}</td>
-                <td>₹${withdrawal.amount}</td>
-                <td>${withdrawal.method}</td>
-                <td>${withdrawal.date}</td>
-                <td><span class="status-badge ${withdrawal.status.toLowerCase()}">${withdrawal.status}</span></td>
-                <td>
-                    ${withdrawal.status === "Pending" ? `
-                        <button class="btn btn-sm btn-success" onclick="approveWithdrawal('${withdrawal.requestId}')">
-                            <i class="fas fa-check"></i> Approve
-                        </button>
-                        <button class="btn btn-sm btn-danger" onclick="rejectWithdrawal('${withdrawal.requestId}')">
-                            <i class="fas fa-times"></i> Reject
-                        </button>
-                    ` : 'Processed'}
-                </td>
-            </tr>
-        `;
-    });
-    
-    document.getElementById('adminWithdrawalsTable').innerHTML = html;
-}
-
-function approveWithdrawal(requestId) {
-    const withdrawal = platformData.withdrawalRequests.find(req => req.requestId === requestId);
-    if (!withdrawal) return;
-    
-    const user = platformData.users[withdrawal.userId];
-    if (!user) return;
-    
-    const fee = (withdrawal.amount * platformData.settings.withdrawalFee) / 100;
-    const netAmount = withdrawal.amount - fee;
-    
-    if (confirm(`Approve withdrawal of ₹${withdrawal.amount} to ${user.name}?\nFee: ₹${fee}\nNet Amount: ₹${netAmount}`)) {
-        withdrawal.status = "Approved";
-        withdrawal.approvedBy = currentAdmin.id;
-        withdrawal.approvedAt = new Date().toLocaleString();
-        withdrawal.transactionId = 'TXN' + Math.floor(Math.random() * 1000000);
-        withdrawal.fee = fee;
-        withdrawal.netAmount = netAmount;
-        
-        const userWithdrawal = user.withdrawalHistory.find(w => w.reqId === requestId);
-        if (userWithdrawal) {
-            userWithdrawal.status = "Approved";
-            userWithdrawal.processed = new Date().toLocaleString();
-            userWithdrawal.transId = withdrawal.transactionId;
-        }
-        
-        platformData.transactions.push({
-            id: withdrawal.requestId,
-            userId: withdrawal.userId,
-            type: 'Withdrawal',
-            amount: withdrawal.amount,
-            date: new Date().toLocaleString(),
-            status: 'Approved',
-            description: `Withdrawal to ${withdrawal.method}, Fee: ₹${fee}`
-        });
-        
-        platformData.platformBalance += fee;
-        
-        savePlatformData();
-        
-        showToast(`Withdrawal of ₹${withdrawal.amount} approved for ${user.name}`, 'success');
-        loadWithdrawalsTable();
-        updateAdminDashboard();
-        updateNotificationCount();
-    }
-}
-
-function rejectWithdrawal(requestId) {
-    const withdrawal = platformData.withdrawalRequests.find(req => req.requestId === requestId);
-    if (!withdrawal) return;
-    
-    const user = platformData.users[withdrawal.userId];
-    if (!user) return;
-    
-    const reason = prompt("Enter reason for rejection:", "Insufficient KYC");
-    if (reason === null) return;
-    
-    user.balance += withdrawal.amount;
-    
-    withdrawal.status = "Rejected";
-    withdrawal.rejectionReason = reason;
-    withdrawal.rejectedBy = currentAdmin.id;
-    withdrawal.rejectedAt = new Date().toLocaleString();
-    
-    const userWithdrawal = user.withdrawalHistory.find(w => w.reqId === requestId);
-    if (userWithdrawal) {
-        userWithdrawal.status = "Rejected";
-    }
-    
-    platformData.transactions.push({
-        id: withdrawal.requestId,
-        userId: withdrawal.userId,
-        type: 'Withdrawal',
-        amount: withdrawal.amount,
-        date: new Date().toLocaleString(),
-        status: 'Rejected',
-        description: `Withdrawal rejected: ${reason}`
-    });
-    
-    savePlatformData();
-    
-    showToast(`Withdrawal request rejected, amount returned to user`, 'success');
-    loadWithdrawalsTable();
-    updateAdminDashboard();
-    updateNotificationCount();
-}
-
-function loadPackageRequestsTable() {
-    let html = '';
-    platformData.packageRequests.forEach(req => {
-        html += `
-            <tr>
-                <td>${req.requestId}</td>
-                <td>${req.userId}</td>
-                <td>${req.name}</td>
-                <td>${req.package}</td>
-                <td>₹${req.amount}</td>
-                <td>${req.date}</td>
-                <td>${req.paymentMethod}</td>
-                <td><span class="status-badge ${req.status.toLowerCase()}">${req.status}</span></td>
-                <td>
-                    ${req.status === "Pending" ? `
-                        <button class="btn btn-sm btn-success" onclick="approvePackage('${req.requestId}')">
-                            <i class="fas fa-check"></i> Approve
-                        </button>
-                        <button class="btn btn-sm btn-danger" onclick="rejectPackage('${req.requestId}')">
-                            <i class="fas fa-times"></i> Reject
-                        </button>
-                    ` : 'Processed'}
-                </td>
-            </tr>
-        `;
-    });
-    
-    document.getElementById('adminPackageRequestsTable').innerHTML = html;
-}
-
-function approvePackage(requestId) {
-    const pkgReq = platformData.packageRequests.find(req => req.requestId === requestId);
-    if (!pkgReq) return;
-    
-    const user = platformData.users[pkgReq.userId];
-    if (!user) return;
-    
-    if (confirm(`Approve ${pkgReq.package} package of ₹${pkgReq.amount} for ${user.name}?`)) {
-        pkgReq.status = "Approved";
-        pkgReq.approvedBy = currentAdmin.id;
-        pkgReq.approvedAt = new Date().toLocaleString();
-        
-        user.package = pkgReq.package;
-        user.fund += pkgReq.amount;
-        
-        const validityDate = new Date();
-        validityDate.setDate(validityDate.getDate() + platformData.settings.packageValidity);
-        
-        user.activationHistory.push({
-            id: pkgReq.requestId,
-            date: new Date().toLocaleString(),
-            package: pkgReq.package,
-            amount: pkgReq.amount,
-            status: 'Active',
-            validityTill: validityDate.toLocaleDateString('en-US'),
-            dailyIncome: (pkgReq.amount * platformData.settings.dailyTaskIncome / 100)
-        });
-        
-        platformData.transactions.push({
-            id: pkgReq.requestId,
-            userId: pkgReq.userId,
-            type: 'Package Activation',
-            amount: pkgReq.amount,
-            date: new Date().toLocaleString(),
-            status: 'Approved',
-            description: `${pkgReq.package} Package activated`
-        });
-        
-        platformData.platformBalance += pkgReq.amount;
-        
-        savePlatformData();
-        
-        showToast(`Package ${pkgReq.package} approved for ${user.name}`, 'success');
-        loadPackageRequestsTable();
-        updateAdminDashboard();
-        updateNotificationCount();
-    }
-}
-
-function rejectPackage(requestId) {
-    const pkgReq = platformData.packageRequests.find(req => req.requestId === requestId);
-    if (!pkgReq) return;
-    
-    const user = platformData.users[pkgReq.userId];
-    if (!user) return;
-    
-    const reason = prompt("Enter reason for rejection:", "Payment not verified");
-    if (reason === null) return;
-    
-    user.balance += pkgReq.amount;
-    
-    pkgReq.status = "Rejected";
-    pkgReq.rejectionReason = reason;
-    pkgReq.rejectedBy = currentAdmin.id;
-    pkgReq.rejectedAt = new Date().toLocaleString();
-    
-    platformData.transactions.push({
-        id: pkgReq.requestId,
-        userId: pkgReq.userId,
-        type: 'Package Request',
-        amount: pkgReq.amount,
-        date: new Date().toLocaleString(),
-        status: 'Rejected',
-        description: `Package rejected: ${reason}`
-    });
-    
-    savePlatformData();
-    
-    showToast(`Package request rejected, amount returned to user`, 'success');
-    loadPackageRequestsTable();
-    updateAdminDashboard();
-    updateNotificationCount();
-}
-
-function loadKYCTable() {
-    const pendingKYC = platformData.kycRequests.filter(req => req.status === "Pending");
-    const verifiedKYC = platformData.kycRequests.filter(req => req.status === "Verified");
-    const rejectedKYC = platformData.kycRequests.filter(req => req.status === "Rejected");
-    
-    document.getElementById('pendingKYC').innerText = pendingKYC.length;
-    document.getElementById('verifiedKYC').innerText = verifiedKYC.length;
-    document.getElementById('rejectedKYC').innerText = rejectedKYC.length;
-    
-    let html = '';
-    [...pendingKYC, ...verifiedKYC, ...rejectedKYC].forEach(kyc => {
-        html += `
-            <tr>
-                <td>${kyc.userId}</td>
-                <td>${platformData.users[kyc.userId]?.name || 'N/A'}</td>
-                <td>${kyc.aadharNumber}</td>
-                <td>${kyc.panNumber}</td>
-                <td>${kyc.submittedDate}</td>
-                <td><span class="status-badge ${kyc.status.toLowerCase()}">${kyc.status}</span></td>
-                <td>
-                    ${kyc.status === "Pending" ? `
-                        <button class="btn btn-sm btn-success" onclick="verifyKYC('${kyc.userId}')">
-                            <i class="fas fa-check"></i> Verify
-                        </button>
-                        <button class="btn btn-sm btn-danger" onclick="rejectKYC('${kyc.userId}')">
-                            <i class="fas fa-times"></i> Reject
-                        </button>
-                    ` : kyc.status === "Verified" ? 'Verified' : 'Rejected'}
-                </td>
-            </tr>
-        `;
-    });
-    
-    document.getElementById('adminKYCTable').innerHTML = html;
-}
-
-function verifyKYC(userId) {
-    const kyc = platformData.kycRequests.find(req => req.userId === userId && req.status === "Pending");
-    if (!kyc) return;
-    
-    const user = platformData.users[userId];
-    if (!user) return;
-    
-    if (confirm(`Verify KYC for ${user.name}?`)) {
-        kyc.status = "Verified";
-        kyc.verifiedBy = currentAdmin.id;
-        kyc.verifiedAt = new Date().toLocaleString();
-        
-        user.kyc = "Approved";
-        
-        const bonus = 50;
-        user.balance += bonus;
-        user.totalIncome += bonus;
-        user.todayIncome += bonus;
-        
-        platformData.transactions.push({
-            id: 'TRN' + Math.floor(Math.random() * 1000000),
-            userId: userId,
-            type: 'KYC Bonus',
-            amount: bonus,
-            date: new Date().toLocaleString(),
-            status: 'Completed',
-            description: 'KYC verification bonus'
-        });
-        
-        savePlatformData();
-        
-        showToast(`KYC verified for ${user.name}. ₹${bonus} bonus added.`, 'success');
-        loadKYCTable();
-        updateAdminDashboard();
-        updateNotificationCount();
-    }
-}
-
-function rejectKYC(userId) {
-    const kyc = platformData.kycRequests.find(req => req.userId === userId && req.status === "Pending");
-    if (!kyc) return;
-    
-    const user = platformData.users[userId];
-    if (!user) return;
-    
-    const reason = prompt("Enter reason for KYC rejection:", "Documents unclear");
-    if (reason === null) return;
-    
-    kyc.status = "Rejected";
-    kyc.rejectionReason = reason;
-    kyc.rejectedBy = currentAdmin.id;
-    kyc.rejectedAt = new Date().toLocaleString();
-    
-    user.kyc = "Rejected";
-    
-    savePlatformData();
-    
-    showToast(`KYC rejected for ${user.name}`, 'success');
-    loadKYCTable();
-    updateAdminDashboard();
-    updateNotificationCount();
-}
-
-function loadTransactionsTable() {
-    let html = '';
-    platformData.transactions.forEach(trans => {
-        html += `
-            <tr>
-                <td>${trans.id}</td>
-                <td>${trans.userId}</td>
-                <td>${trans.type}</td>
-                <td>₹${trans.amount}</td>
-                <td>${trans.description}</td>
-                <td>${trans.date}</td>
-                <td><span class="status-badge ${trans.status.toLowerCase()}">${trans.status}</span></td>
-            </tr>
-        `;
-    });
-    
-    document.getElementById('adminTransactionsTable').innerHTML = html;
-}
-
-function filterTransactions() {
-    const fromDate = document.getElementById('transactionFromDate').value;
-    const toDate = document.getElementById('transactionToDate').value;
-    const type = document.getElementById('transactionType').value;
-    
-    let filtered = platformData.transactions;
-    
-    if (fromDate) {
-        filtered = filtered.filter(trans => new Date(trans.date) >= new Date(fromDate));
-    }
-    
-    if (toDate) {
-        filtered = filtered.filter(trans => new Date(trans.date) <= new Date(toDate + ' 23:59:59'));
-    }
-    
-    if (type) {
-        filtered = filtered.filter(trans => trans.type.toLowerCase().includes(type.toLowerCase()));
-    }
-    
-    let html = '';
-    filtered.forEach(trans => {
-        html += `
-            <tr>
-                <td>${trans.id}</td>
-                <td>${trans.userId}</td>
-                <td>${trans.type}</td>
-                <td>₹${trans.amount}</td>
-                <td>${trans.description}</td>
-                <td>${trans.date}</td>
-                <td><span class="status-badge ${trans.status.toLowerCase()}">${trans.status}</span></td>
-            </tr>
-        `;
-    });
-    
-    document.getElementById('adminTransactionsTable').innerHTML = html;
-}
-
-function loadAdminSettings() {
-    const settings = platformData.settings;
-    document.getElementById('minDeposit').value = settings.minDeposit;
-    document.getElementById('minWithdrawal').value = settings.minWithdrawal;
-    document.getElementById('withdrawalFee').value = settings.withdrawalFee;
-    document.getElementById('referralCommission').value = settings.referralCommission;
-    document.getElementById('dailyTaskIncome').value = settings.dailyTaskIncome;
-    document.getElementById('packageValidity').value = settings.packageValidity;
-    document.getElementById('adminUpiId').value = settings.upiId;
-    document.getElementById('bankDetailsText').value = settings.bankDetails;
-}
-
-function saveAdminSettings() {
-    platformData.settings = {
-        minDeposit: parseInt(document.getElementById('minDeposit').value) || 100,
-        minWithdrawal: parseInt(document.getElementById('minWithdrawal').value) || 200,
-        withdrawalFee: parseInt(document.getElementById('withdrawalFee').value) || 5,
-        referralCommission: parseInt(document.getElementById('referralCommission').value) || 10,
-        dailyTaskIncome: parseInt(document.getElementById('dailyTaskIncome').value) || 5,
-        packageValidity: parseInt(document.getElementById('packageValidity').value) || 30,
-        upiId: document.getElementById('adminUpiId').value || "capitalrise@ybl",
-        bankDetails: document.getElementById('bankDetailsText').value || "",
-        qrCode: platformData.settings.qrCode
-    };
-    
-    savePlatformData();
-    showToast('Settings saved successfully!', 'success');
-}
-
-function loadAdminProfile() {
-    document.getElementById('adminProfileId').value = platformData.superAdmin.id;
-    document.getElementById('adminProfileName').value = platformData.superAdmin.name;
-}
-
-function updateAdminProfile() {
-    const currentPass = document.getElementById('adminCurrentPassword').value;
-    const newPass = document.getElementById('adminNewPassword').value;
-    const confirmPass = document.getElementById('adminConfirmPassword').value;
-    const name = document.getElementById('adminProfileName').value;
-    
-    if (!name) {
-        showToast('Please enter admin name', 'error');
-        return;
-    }
-    
-    platformData.superAdmin.name = name;
-    
-    if (currentPass || newPass || confirmPass) {
-        if (currentPass !== platformData.superAdmin.password) {
-            showToast('Current password is incorrect', 'error');
-            return;
-        }
-        
-        if (newPass !== confirmPass) {
-            showToast('New passwords do not match', 'error');
-            return;
-        }
-        
-        if (newPass.length < 6) {
-            showToast('Password must be at least 6 characters', 'error');
-            return;
-        }
-        
-        platformData.superAdmin.password = newPass;
-        
-        document.getElementById('adminCurrentPassword').value = '';
-        document.getElementById('adminNewPassword').value = '';
-        document.getElementById('adminConfirmPassword').value = '';
-    }
-    
-    savePlatformData();
-    showToast('Admin profile updated successfully!', 'success');
-}
-
-function resetAdminPassword() {
-    if (confirm('Reset admin password to default (admin123)?')) {
-        platformData.superAdmin.password = 'admin123';
-        savePlatformData();
-        showToast('Admin password reset to default (admin123)', 'success');
-    }
-}
-
-// ================= INITIALIZE DASHBOARD =================
-updateDashboard();
+// ================= INITIALIZATION =================
+document.addEventListener('DOMContentLoaded', function() {
+    // Firebase will handle auth state automatically
+    
+    // Demo credentials for testing
+    document.getElementById('loginEmail').value = 'demo@example.com';
+    document.getElementById('loginPassword').value = 'password123';
+    document.getElementById('adminUsername').value = 'admin';
+    document.getElementById('adminPassword').value = 'admin123';
+});
 </script>
 </body>
 </html>
